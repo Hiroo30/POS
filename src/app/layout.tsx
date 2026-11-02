@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import PwaInstallPrompt from "@/components/PwaInstallPrompt";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
   title: "Aplikasi Inventori",
@@ -60,6 +62,8 @@ export default function RootLayout({
           </main>
         </div>
         <PwaInstallPrompt />
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
