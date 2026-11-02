@@ -63,11 +63,8 @@ function hasRedisEnv(): boolean {
 }
 
 function hasBlobEnv(): boolean {
-  return Boolean(
-    process.env.BLOB_READ_WRITE_TOKEN ||
-      process.env.BLOB_STORE_ID ||
-      process.env.VERCEL_OIDC_TOKEN
-  );
+  // Completely disabled in favor of Upstash Redis (avoids Vercel Blob quota limits)
+  return false;
 }
 
 let _redis: Redis | null = null;
@@ -254,7 +251,7 @@ async function writeBlobDb(data: DatabaseSchema, deviceId: string): Promise<void
 export async function getDbState(deviceId?: string): Promise<DatabaseSchema> {
   const normId = normalizeDeviceId(deviceId);
 
-  // 1. Redis
+  // 1. Upstash Redis (Cloud Database)
   const redis = getRedis();
   if (redis) {
     try {
@@ -278,19 +275,23 @@ export async function getDbState(deviceId?: string): Promise<DatabaseSchema> {
           kasbon: kasbon || [],
           lastBackupDate: new Date().toISOString(),
         };
+      } else {
+        // Initialize clean state in Redis for new device partition
+        const initial = createInitialState();
+        await Promise.all([
+          redis.set(pKey, initial.products),
+          redis.set(tKey, initial.transactions),
+          redis.set(sKey, initial.sales),
+          redis.set(kKey, initial.kasbon),
+        ]);
+        return initial;
       }
     } catch (e) {
       console.warn("Redis getDbState error:", e);
     }
   }
 
-  // 2. Vercel Blob
-  if (hasBlobEnv()) {
-    const blobData = await readBlobDb(normId);
-    if (blobData) return blobData;
-  }
-
-  // 3. Local fallback
+  // 2. Local fallback
   return readLocalDb(normId);
 }
 
@@ -298,7 +299,7 @@ export async function saveDbState(data: DatabaseSchema, deviceId?: string): Prom
   const normId = normalizeDeviceId(deviceId);
   memDbByDevice[normId] = data;
 
-  // 1. Redis
+  // 1. Upstash Redis (Cloud Database)
   const redis = getRedis();
   if (redis) {
     try {
@@ -313,21 +314,15 @@ export async function saveDbState(data: DatabaseSchema, deviceId?: string): Prom
         redis.set(sKey, data.sales || []),
         redis.set(kKey, data.kasbon || []),
       ]);
+      // Also update local mem/file for dev offline backup
+      writeLocalDb(data, normId);
+      return; // Early return: NEVER touch Vercel Blob!
     } catch (e) {
       console.warn("Redis saveDbState error:", e);
     }
   }
 
-  // 2. Vercel Blob
-  if (hasBlobEnv()) {
-    try {
-      await writeBlobDb(data, normId);
-    } catch (e) {
-      console.warn("Vercel Blob saveDbState error:", e);
-    }
-  }
-
-  // 3. Local file
+  // 2. Local file
   writeLocalDb(data, normId);
 }
 
