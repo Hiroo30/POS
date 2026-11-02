@@ -258,44 +258,4 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
 ];
 
-export const INITIAL_KASBON: KasbonRecord[] = [
-  {
-    id: "bon-1",
-    customerName: "Bu Siti (Depan Masjid)",
-    phone: "081234567890",
-    itemsSummary: "Beras Ramos 5kg, Telur 1kg, Bimoli 2L",
-    amount: 143500,
-    paidAmount: 50000,
-    remainingAmount: 93500,
-    status: "BELUM_LUNAS",
-    dueDate: new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10),
-    notes: "Janji bayar pas suami gajian hari Jumat",
-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-  },
-  {
-    id: "bon-2",
-    customerName: "Pak RT Bambang",
-    phone: "085678901234",
-    itemsSummary: "Rokok Djarum Super 2 bks, Kopi Kapal Api 1 renteng",
-    amount: 72000,
-    paidAmount: 0,
-    remainingAmount: 72000,
-    status: "BELUM_LUNAS",
-    dueDate: new Date(Date.now() + 86400000 * 5).toISOString().slice(0, 10),
-    notes: "Untuk rapat warga RT 03",
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: "bon-3",
-    customerName: "Mbak Rina (Kontrakan Bu Haji)",
-    phone: "089876543210",
-    itemsSummary: "Minyak Filma 1L, Indomie Goreng 5 bks, Telur 1/2kg",
-    amount: 52000,
-    paidAmount: 52000,
-    remainingAmount: 0,
-    status: "LUNAS",
-    notes: "Sudah dilunasi via transfer QRIS",
-    createdAt: new Date(Date.now() - 86400000 * 4).toISOString(),
-    paidAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-];
+export const INITIAL_KASBON: KasbonRecord[] = [];

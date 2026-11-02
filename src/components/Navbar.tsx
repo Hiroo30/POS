@@ -104,7 +104,7 @@ export default function Navbar() {
         <div style={{padding:'12px 16px', borderTop:'1px solid rgba(255,255,255,0.07)'}}>
           <div style={{display:'flex', alignItems:'center', gap:6, fontSize:11, color:'#86efac'}}>
             <span className="pulse-dot" style={{display:'inline-block', width:7, height:7, borderRadius:'50%', background:'#4ade80'}}/>
-            Online · Toko Berkah
+            Online · Toko DEWI
           </div>
         </div>
       </nav>

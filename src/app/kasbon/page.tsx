@@ -156,70 +156,133 @@ export default function KasbonPage() {
             <div style={{ fontSize: 14, fontWeight: 600 }}>Tidak ada data kasbon</div>
           </div>
         ) : (
-          <div className="kp-card" style={{ overflow: "auto" }}>
-            <table className="kp-table">
-              <thead>
-                <tr>
-                  <th>Pelanggan</th>
-                  <th>Rincian</th>
-                  <th>Tanggal</th>
-                  <th>Jatuh Tempo</th>
-                  <th style={{ textAlign: "right" }}>Total</th>
-                  <th style={{ textAlign: "right" }}>Sisa</th>
-                  <th style={{ textAlign: "center" }}>Status</th>
-                  <th style={{ textAlign: "center" }}>Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      <span style={{ fontWeight: 700 }}>{r.customerName}</span>
-                      {r.phone && <div style={{ fontSize: 10, color: "#94a3b8" }}>{r.phone}</div>}
-                    </td>
-                    <td style={{ fontSize: 11, color: "#64748b", maxWidth: 200, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {r.itemsSummary}
-                    </td>
-                    <td style={{ fontSize: 11 }}>{new Date(r.createdAt).toLocaleDateString("id-ID")}</td>
-                    <td
-                      style={{
-                        fontSize: 11,
-                        color:
-                          r.dueDate &&
-                          nowMs > 0 &&
-                          new Date(r.dueDate).getTime() < nowMs &&
-                          r.status === "BELUM_LUNAS"
-                            ? "#dc2626"
-                            : "#64748b",
-                      }}
-                    >
-                      {r.dueDate ? new Date(r.dueDate).toLocaleDateString("id-ID") : "-"}
-                    </td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>{formatRupiah(r.amount)}</td>
-                    <td style={{ textAlign: "right", fontWeight: 800, color: r.status === "BELUM_LUNAS" ? "#dc2626" : "#16a34a" }}>
-                      {formatRupiah(r.remainingAmount ?? r.amount)}
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      <span className={`kp-badge ${r.status === "LUNAS" ? "green" : "red"}`}>
-                        {r.status === "LUNAS" ? "Lunas" : "Belum Lunas"}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      {r.status === "BELUM_LUNAS" && (
-                        <button
-                          className="kp-btn-primary"
-                          style={{ fontSize: 10, padding: "4px 10px" }}
-                          onClick={() => handleMarkPaid(r)}
-                        >
-                          Tandai Lunas
-                        </button>
-                      )}
-                    </td>
+          <>
+            {/* Desktop Table View */}
+            <div className="desktop-only kp-card" style={{ overflow: "auto" }}>
+              <table className="kp-table">
+                <thead>
+                  <tr>
+                    <th>Pelanggan</th>
+                    <th>Rincian</th>
+                    <th>Tanggal</th>
+                    <th>Jatuh Tempo</th>
+                    <th style={{ textAlign: "right" }}>Total</th>
+                    <th style={{ textAlign: "right" }}>Sisa</th>
+                    <th style={{ textAlign: "center" }}>Status</th>
+                    <th style={{ textAlign: "center" }}>Aksi</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filtered.map((r) => (
+                    <tr key={r.id}>
+                      <td>
+                        <span style={{ fontWeight: 700 }}>{r.customerName}</span>
+                        {r.phone && <div style={{ fontSize: 10, color: "#94a3b8" }}>{r.phone}</div>}
+                      </td>
+                      <td style={{ fontSize: 11, color: "#64748b", maxWidth: 200, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {r.itemsSummary}
+                      </td>
+                      <td style={{ fontSize: 11 }}>{new Date(r.createdAt).toLocaleDateString("id-ID")}</td>
+                      <td
+                        style={{
+                          fontSize: 11,
+                          color:
+                            r.dueDate &&
+                            nowMs > 0 &&
+                            new Date(r.dueDate).getTime() < nowMs &&
+                            r.status === "BELUM_LUNAS"
+                              ? "#dc2626"
+                              : "#64748b",
+                        }}
+                      >
+                        {r.dueDate ? new Date(r.dueDate).toLocaleDateString("id-ID") : "-"}
+                      </td>
+                      <td style={{ textAlign: "right", fontWeight: 600 }}>{formatRupiah(r.amount)}</td>
+                      <td style={{ textAlign: "right", fontWeight: 800, color: r.status === "BELUM_LUNAS" ? "#dc2626" : "#16a34a" }}>
+                        {formatRupiah(r.remainingAmount ?? r.amount)}
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        <span className={`kp-badge ${r.status === "LUNAS" ? "green" : "red"}`}>
+                          {r.status === "LUNAS" ? "Lunas" : "Belum Lunas"}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        {r.status === "BELUM_LUNAS" && (
+                          <button
+                            className="kp-btn-primary"
+                            style={{ fontSize: 10, padding: "4px 10px" }}
+                            onClick={() => handleMarkPaid(r)}
+                          >
+                            Tandai Lunas
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card-Based View */}
+            <div className="mobile-only" style={{ display: "flex", flexDirection: "column", gap: 10, paddingBottom: 80 }}>
+              {filtered.map((r) => {
+                const isOverdue = r.dueDate && nowMs > 0 && new Date(r.dueDate).getTime() < nowMs && r.status === "BELUM_LUNAS";
+                return (
+                  <div
+                    key={r.id}
+                    className="kp-card"
+                    style={{
+                      padding: "12px 14px",
+                      borderColor: r.status === "BELUM_LUNAS" ? (isOverdue ? "#fca5a5" : "#e2e8f0") : "#bbf7d0",
+                      background: isOverdue ? "#fef2f2" : "#fff",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: "#1e293b" }}>{r.customerName}</div>
+                        {r.phone && <div style={{ fontSize: 10.5, color: "#64748b" }}>{r.phone}</div>}
+                      </div>
+                      <span className={`kp-badge ${r.status === "LUNAS" ? "green" : "red"}`}>
+                        {r.status === "LUNAS" ? "Lunas" : isOverdue ? "Jatuh Tempo!" : "Belum Lunas"}
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: 11, color: "#475569", background: "#f8fafc", padding: "6px 8px", borderRadius: 6, marginBottom: 8 }}>
+                      {r.itemsSummary}
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 11, marginBottom: 10 }}>
+                      <div>
+                        <span style={{ color: "#94a3b8", display: "block", fontSize: 10 }}>TOTAL BON</span>
+                        <span style={{ fontWeight: 700, color: "#1e293b" }}>{formatRupiah(r.amount)}</span>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <span style={{ color: "#94a3b8", display: "block", fontSize: 10 }}>SISA TAGIHAN</span>
+                        <span style={{ fontWeight: 800, color: r.status === "BELUM_LUNAS" ? "#dc2626" : "#16a34a" }}>
+                          {formatRupiah(r.remainingAmount ?? r.amount)}
+                        </span>
+                      </div>
+                      {r.dueDate && (
+                        <div style={{ gridColumn: "1/-1", fontSize: 10.5, color: isOverdue ? "#dc2626" : "#64748b" }}>
+                          Jatuh tempo: {new Date(r.dueDate).toLocaleDateString("id-ID")}
+                        </div>
+                      )}
+                    </div>
+
+                    {r.status === "BELUM_LUNAS" && (
+                      <button
+                        className="kp-btn-primary"
+                        style={{ width: "100%", justifyContent: "center", padding: "8px 0", fontSize: 12 }}
+                        onClick={() => handleMarkPaid(r)}
+                      >
+                        Tandai Lunas
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
     </>

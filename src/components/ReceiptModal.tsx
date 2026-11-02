@@ -13,7 +13,7 @@ export default function ReceiptModal({ sale, onClose }: Props) {
 
   const handleShareWhatsApp = () => {
     const lines = [
-      `*TOKO SEMBAKO BERKAH*`,
+      `*TOKO DEWI*`,
       `*BUKTI PEMBAYARAN*`,
       `================================`,
       `No. Nota: ${sale.receiptNo}`,
@@ -61,9 +61,8 @@ export default function ReceiptModal({ sale, onClose }: Props) {
         <div className="kp-receipt select-text" style={{margin:"16px 16px 0"}}>
           {/* Store info */}
           <div style={{textAlign:"center", marginBottom:12}}>
-            <div style={{fontWeight:900, fontSize:14, letterSpacing:0.5}}>TOKO SEMBAKO BERKAH</div>
-            <div style={{fontSize:10, color:"#64748b"}}>Pusat Grosir & Eceran Sembako</div>
-            <div style={{fontSize:10, color:"#64748b"}}>Telp / WA: 0812-3456-7890</div>
+            <div style={{fontWeight:900, fontSize:14, letterSpacing:0.5}}>TOKO DEWI</div>
+            <div style={{fontSize:10, color:"#64748b"}}>Telp / WA: 0823-2038-1500 </div>
           </div>
 
           <div className="kp-receipt-divider" />

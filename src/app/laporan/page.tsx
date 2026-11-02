@@ -120,47 +120,108 @@ export default function LaporanPage() {
             <div style={{fontSize:12}}>Transaksi kasir akan muncul di sini</div>
           </div>
         ) : (
-          <div className="kp-card" style={{overflow:"auto"}}>
-            <table className="kp-table">
-              <thead>
-                <tr>
-                  <th>No. Nota</th>
-                  <th>Waktu</th>
-                  <th>Pelanggan</th>
-                  <th>Item</th>
-                  <th>Metode</th>
-                  <th style={{textAlign:"right"}}>Total</th>
-                  <th style={{textAlign:"right"}}>Laba</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sales.map((sale) => (
-                  <tr key={sale.id}>
-                    <td style={{fontFamily:"monospace", fontSize:11, fontWeight:700}}>{sale.receiptNo}</td>
-                    <td style={{fontSize:11, color:"#64748b"}}>
-                      {new Date(sale.createdAt).toLocaleString("id-ID", {
-                        day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit"
-                      })}
-                    </td>
-                    <td style={{fontSize:12}}>{sale.customerName || "Umum"}</td>
-                    <td style={{fontSize:12}}>{sale.items.length} item</td>
-                    <td>
+          <>
+            {/* Desktop Table View */}
+            <div className="kp-card desktop-only" style={{overflow:"auto"}}>
+              <table className="kp-table">
+                <thead>
+                  <tr>
+                    <th>No. Nota</th>
+                    <th>Waktu</th>
+                    <th>Pelanggan</th>
+                    <th>Item</th>
+                    <th>Metode</th>
+                    <th style={{textAlign:"right"}}>Total</th>
+                    <th style={{textAlign:"right"}}>Laba</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sales.map((sale) => (
+                    <tr key={sale.id}>
+                      <td style={{fontFamily:"monospace", fontSize:11, fontWeight:700}}>{sale.receiptNo}</td>
+                      <td style={{fontSize:11, color:"#64748b"}}>
+                        {new Date(sale.createdAt).toLocaleString("id-ID", {
+                          day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit"
+                        })}
+                      </td>
+                      <td style={{fontSize:12}}>{sale.customerName || "Umum"}</td>
+                      <td style={{fontSize:12}}>{sale.items.length} item</td>
+                      <td>
+                        <span className="kp-badge" style={{
+                          background: `${methodColors[sale.paymentMethod] || "#94a3b8"}20`,
+                          color: methodColors[sale.paymentMethod] || "#94a3b8"
+                        }}>
+                          {sale.paymentMethod}
+                        </span>
+                      </td>
+                      <td style={{textAlign:"right", fontWeight:800, color:"#16a34a"}}>{formatRupiah(sale.totalAmount)}</td>
+                      <td style={{textAlign:"right", fontWeight:700, color: sale.profit > 0 ? "#16a34a" : "#dc2626"}}>
+                        {formatRupiah(sale.profit)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="mobile-only" style={{display:"flex", flexDirection:"column", gap:10}}>
+              {sales.map((sale) => {
+                const totalUnits = sale.items.reduce((sum, item) => sum + item.quantity, 0);
+                return (
+                  <div key={sale.id} className="kp-card" style={{padding:"12px 14px"}}>
+                    <div style={{display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:8}}>
+                      <div>
+                        <div style={{fontFamily:"monospace", fontSize:11, fontWeight:800, color:"#1e293b"}}>
+                          {sale.receiptNo}
+                        </div>
+                        <div style={{fontSize:10, color:"#64748b", marginTop:2}}>
+                          {new Date(sale.createdAt).toLocaleString("id-ID", {
+                            day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit"
+                          })}
+                        </div>
+                      </div>
                       <span className="kp-badge" style={{
                         background: `${methodColors[sale.paymentMethod] || "#94a3b8"}20`,
-                        color: methodColors[sale.paymentMethod] || "#94a3b8"
+                        color: methodColors[sale.paymentMethod] || "#94a3b8",
+                        fontWeight: 800,
+                        fontSize: 10
                       }}>
                         {sale.paymentMethod}
                       </span>
-                    </td>
-                    <td style={{textAlign:"right", fontWeight:800, color:"#16a34a"}}>{formatRupiah(sale.totalAmount)}</td>
-                    <td style={{textAlign:"right", fontWeight:700, color: sale.profit > 0 ? "#16a34a" : "#dc2626"}}>
-                      {formatRupiah(sale.profit)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+
+                    <div style={{
+                      display:"flex", alignItems:"center", justifyContent:"space-between",
+                      padding:"6px 8px", background:"#f8fafc", borderRadius:6, marginBottom:8
+                    }}>
+                      <span style={{fontSize:11.5, color:"#475569"}}>
+                        {sale.customerName ? `Pelanggan: ${sale.customerName}` : "Pelanggan: Umum"}
+                      </span>
+                      <span style={{fontSize:11, fontWeight:600, color:"#64748b"}}>
+                        {sale.items.length} jenis ({totalUnits} qty)
+                      </span>
+                    </div>
+
+                    <div style={{display:"flex", alignItems:"flex-end", justifyContent:"space-between", borderTop:"1px dashed #e2e8f0", paddingTop:8}}>
+                      <div>
+                        <div style={{fontSize:9.5, color:"#64748b", fontWeight:600, textTransform:"uppercase"}}>Estimasi Laba</div>
+                        <div style={{fontSize:12, fontWeight:700, color: sale.profit > 0 ? "#16a34a" : "#dc2626"}}>
+                          +{formatRupiah(sale.profit)}
+                        </div>
+                      </div>
+                      <div style={{textAlign:"right"}}>
+                        <div style={{fontSize:9.5, color:"#64748b", fontWeight:600, textTransform:"uppercase"}}>Total Tagihan</div>
+                        <div style={{fontSize:15, fontWeight:900, color:"#16a34a"}}>
+                          {formatRupiah(sale.totalAmount)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
     </>

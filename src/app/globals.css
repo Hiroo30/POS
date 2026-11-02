@@ -912,6 +912,59 @@ body {
 .text-red { color: #dc2626; }
 .hidden { display: none; }
 
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.animate-slideUp { animation: slideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+/* ─── Floating Mobile Cart & Drawer ────────────────────────── */
+.kp-floating-cart {
+  position: fixed;
+  bottom: 60px;
+  left: 10px;
+  right: 10px;
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  color: #fff;
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 8px 24px rgba(22, 163, 74, 0.45);
+  z-index: 35;
+  cursor: pointer;
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  animation: slideUp 0.2s ease-out;
+}
+@media (min-width: 769px) {
+  .kp-floating-cart { display: none !important; }
+}
+
+.kp-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.kp-drawer {
+  background: #fff;
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.25);
+}
+
 /* ─── Mobile bottom nav ─────────────────────────────────────── */
 @media (max-width: 768px) {
   .kp-sidebar { display: none; }
@@ -924,7 +977,9 @@ body {
     background: #1b2e1f;
     border-top: 2px solid #16a34a;
     z-index: 40;
-    padding: 4px 0;
+    padding: 4px 0 env(safe-area-inset-bottom, 2px);
+    height: 56px;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.25);
   }
   .kp-mobile-nav-item {
     flex: 1;
@@ -934,21 +989,88 @@ body {
     gap: 2px;
     padding: 6px 4px;
     color: #86efac;
-    font-size: 9px;
+    font-size: 9.5px;
     font-weight: 600;
     text-decoration: none;
     cursor: pointer;
     transition: all 0.15s;
   }
-  .kp-mobile-nav-item.active { color: #f59e0b; }
-  .kp-mobile-nav-item svg { width: 20px; height: 20px; }
-  .kp-content { padding-bottom: 72px; }
+  .kp-mobile-nav-item.active { color: #f59e0b; font-weight: 800; }
+  .kp-mobile-nav-item svg { width: 18px; height: 18px; }
+  .kp-content { padding: 10px 12px 100px !important; }
   .kp-cart { display: none; }
-  .kp-product-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  
+  /* Compact & swipable metric cards on mobile */
+  .grid-3 {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 8px;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .grid-3::-webkit-scrollbar { display: none; }
+  .grid-3 > * {
+    min-width: 140px;
+    flex: 1 0 auto;
+    scroll-snap-align: start;
+  }
+
+  .grid-2 {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .kp-product-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  .kp-product-card {
+    padding: 10px 8px !important;
+  }
+  .kp-product-name {
+    font-size: 11.5px !important;
+    min-height: 28px;
+  }
+  .kp-product-price {
+    font-size: 13px !important;
+  }
+  .kp-add-btn {
+    padding: 8px 0 !important;
+    font-size: 11.5px !important;
+  }
+
+  .kp-modal-overlay {
+    padding: 0 !important;
+    align-items: flex-end !important;
+  }
+  .kp-modal {
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    border-top-left-radius: 20px !important;
+    border-top-right-radius: 20px !important;
+    max-height: 92vh !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .kp-modal-body {
+    padding: 14px 16px !important;
+  }
+  .kp-numpad-btn {
+    padding: 14px 0 !important;
+    font-size: 18px !important;
+  }
+
+  .desktop-only { display: none !important; }
+  .mobile-only { display: block !important; }
 }
 
 @media (min-width: 769px) {
   .kp-mobile-nav { display: none; }
+  .desktop-only { display: block; }
+  .mobile-only { display: none !important; }
 }
 
 /* ─── Print ─────────────────────────────────────────────────── */
