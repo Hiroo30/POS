@@ -478,6 +478,29 @@ export default function ProdukPage() {
               </span>
               <p className="text-sm font-semibold">Memuat katalog & fisik stok komoditas...</p>
             </div>
+          ) : products.length === 0 ? (
+            <div className="py-20 text-center text-slate-500 space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
+                <span className="material-symbols-outlined text-[36px]">inventory_2</span>
+              </div>
+              <div>
+                <p className="text-base font-bold text-slate-800">Katalog Toko Masih Kosong</p>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+                  Data mulai dari nol. Daftarkan komoditas atau produk sembako pertama Anda sekarang.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setProductToEdit(null);
+                  setFormModalOpen(true);
+                }}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-md transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">add_circle</span>
+                <span>+ Tambah Produk Pertama</span>
+              </button>
+            </div>
           ) : filteredProducts.length === 0 ? (
             <div className="py-20 text-center text-slate-400 space-y-3">
               <span className="material-symbols-outlined text-[48px] text-slate-300">

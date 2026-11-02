@@ -25,18 +25,15 @@ function formatRupiah(n: number) {
   return "Rp " + Math.round(n).toLocaleString("id-ID");
 }
 
-const QUICK_CUSTOMERS = [
-  { id: "walkin", label: "Walk-in (Umum)" },
-  { id: "pak-rt", label: "Pak RT Bambang" },
-  { id: "bu-siti", label: "Bu Siti Warung" },
-];
-
 export default function PosPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("semua");
-  const [selectedCustomer, setSelectedCustomer] = useState("Walk-in (Umum)");
+  const [customers, setCustomers] = useState<string[]>(["Walk-in (Umum)"]);
+  const [selectedCustomer, setSelectedCustomer] = useState<string>("Walk-in (Umum)");
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState<boolean>(false);
+  const [newCustomerName, setNewCustomerName] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [showCheckout, setShowCheckout] = useState(false);
@@ -47,10 +44,10 @@ export default function PosPage() {
   const [timeStr, setTimeStr] = useState("14:30 WIB");
   const [deviceId, setDeviceId] = useState("");
   const [deviceLabel, setDeviceLabel] = useState("");
-  const [cashDrawerAmount, setCashDrawerAmount] = useState<number>(1450000);
+  const [cashDrawerAmount, setCashDrawerAmount] = useState<number>(0);
   const [showCashDrawerModal, setShowCashDrawerModal] = useState<boolean>(false);
 
-  // Load per-device cart & cash drawer on mount
+  // Load per-device cart, customers & cash drawer on mount
   useEffect(() => {
     const id = getDeviceId();
     setDeviceId(id);
@@ -66,10 +63,52 @@ export default function PosPage() {
         const num = parseInt(savedDrawer, 10);
         if (!isNaN(num)) setCashDrawerAmount(num);
       }
+      const savedCust = localStorage.getItem(`pos_customers_${id}`);
+      if (savedCust) {
+        const parsedCust = JSON.parse(savedCust);
+        if (Array.isArray(parsedCust) && parsedCust.length > 0) {
+          // Remove old hardcoded demo customers if present
+          const cleanCust = parsedCust.filter((c: string) => c !== "Pak RT Bambang" && c !== "Bu Siti Warung");
+          if (!cleanCust.includes("Walk-in (Umum)")) cleanCust.unshift("Walk-in (Umum)");
+          setCustomers(cleanCust);
+        }
+      }
     } catch {
       // fallback
     }
   }, []);
+
+  const handleAddCustomer = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = newCustomerName.trim();
+    if (!name) return;
+    if (!customers.includes(name)) {
+      const updated = [...customers, name];
+      setCustomers(updated);
+      try {
+        if (deviceId) {
+          localStorage.setItem(`pos_customers_${deviceId}`, JSON.stringify(updated));
+        }
+      } catch {}
+    }
+    setSelectedCustomer(name);
+    setNewCustomerName("");
+    setShowAddCustomerModal(false);
+  };
+
+  const handleDeleteCustomer = (nameToDelete: string) => {
+    if (nameToDelete === "Walk-in (Umum)") return;
+    const updated = customers.filter((c) => c !== nameToDelete);
+    setCustomers(updated);
+    if (selectedCustomer === nameToDelete) {
+      setSelectedCustomer("Walk-in (Umum)");
+    }
+    try {
+      if (deviceId) {
+        localStorage.setItem(`pos_customers_${deviceId}`, JSON.stringify(updated));
+      }
+    } catch {}
+  };
 
   const handleSaveCashDrawer = (newAmount: number) => {
     setCashDrawerAmount(newAmount);
@@ -413,7 +452,7 @@ export default function PosPage() {
               </div>
             </div>
 
-            {/* Quick Customer Fast Selector (Stitch Feature) */}
+            {/* Quick Customer Fast Selector (Editable & Dynamic) */}
             <div style={{display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap"}}>
               <span style={{fontSize: 11, fontWeight: 700, color: "#64748b", display: "flex", alignItems: "center", gap: 4}}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -421,26 +460,83 @@ export default function PosPage() {
                 </svg>
                 Pelanggan:
               </span>
-              {QUICK_CUSTOMERS.map((c) => {
-                const isSelected = selectedCustomer === c.label;
+              {customers.map((c) => {
+                const isSelected = selectedCustomer === c;
+                const isWalkIn = c === "Walk-in (Umum)";
                 return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => setSelectedCustomer(c.label)}
-                    style={{
-                      padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700,
-                      cursor: "pointer", border: isSelected ? "none" : "1px solid #e2e8f0",
-                      background: isSelected ? "#006c49" : "#ffffff",
-                      color: isSelected ? "#ffffff" : "#475569",
-                      boxShadow: isSelected ? "0 2px 6px rgba(0,108,73,0.25)" : "none",
-                      transition: "all 0.15s ease"
-                    }}
-                  >
-                    {c.label}
-                  </button>
+                  <div key={c} className="inline-flex items-center rounded-lg overflow-hidden shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCustomer(c)}
+                      style={{
+                        padding: "4px 10px",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        border: isSelected ? "none" : "1px solid #e2e8f0",
+                        background: isSelected ? "#006c49" : "#ffffff",
+                        color: isSelected ? "#ffffff" : "#475569",
+                        borderTopRightRadius: isWalkIn ? 8 : 0,
+                        borderBottomRightRadius: isWalkIn ? 8 : 0,
+                        borderTopLeftRadius: 8,
+                        borderBottomLeftRadius: 8,
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      {c}
+                    </button>
+                    {!isWalkIn && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCustomer(c);
+                        }}
+                        style={{
+                          padding: "4px 7px",
+                          fontSize: 10,
+                          fontWeight: 800,
+                          cursor: "pointer",
+                          border: isSelected ? "none" : "1px solid #e2e8f0",
+                          borderLeft: "none",
+                          background: isSelected ? "#005237" : "#f8fafc",
+                          color: isSelected ? "#a7f3d0" : "#94a3b8",
+                          borderTopRightRadius: 8,
+                          borderBottomRightRadius: 8,
+                          transition: "all 0.15s ease",
+                        }}
+                        title={`Hapus pelanggan ${c}`}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 );
               })}
+
+              {/* + Tambah Pelanggan Button */}
+              <button
+                type="button"
+                onClick={() => setShowAddCustomerModal(true)}
+                style={{
+                  padding: "4px 9px",
+                  borderRadius: 8,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  border: "1px dashed #10b981",
+                  background: "#ecfdf5",
+                  color: "#059669",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 3,
+                  transition: "all 0.15s ease",
+                }}
+                title="Tambah nama pelanggan atau langganan warung baru"
+              >
+                <span className="material-symbols-outlined text-[14px]">person_add</span>
+                <span>+ Pelanggan</span>
+              </button>
             </div>
 
             {/* Category Filter Pills */}
@@ -461,6 +557,32 @@ export default function PosPage() {
                 </svg>
                 <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
                 <div style={{marginTop: 8, fontSize: 13, fontWeight: 600}}>Memuat katalog produk Toko Dewi...</div>
+              </div>
+            ) : products.length === 0 ? (
+              <div style={{textAlign: "center", padding: "60px 20px", color: "#64748b"}}>
+                <div style={{
+                  width: 64, height: 64, borderRadius: 20, background: "#ecfdf5",
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  color: "#059669", marginBottom: 16
+                }}>
+                  <span className="material-symbols-outlined text-[36px]">inventory_2</span>
+                </div>
+                <div style={{fontSize: 16, fontWeight: 800, color: "#1e293b"}}>Katalog Toko Masih Kosong</div>
+                <div style={{fontSize: 12.5, color: "#64748b", marginTop: 4, maxWidth: 360, margin: "4px auto 16px"}}>
+                  Data mulai bersih dari nol. Silakan tambahkan barang jualan pertama Anda di menu Katalog & Stok.
+                </div>
+                <a
+                  href="/produk"
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    padding: "9px 18px", borderRadius: 10, background: "#006c49",
+                    color: "#ffffff", fontSize: 13, fontWeight: 700, textDecoration: "none",
+                    boxShadow: "0 2px 8px rgba(0,108,73,0.25)"
+                  }}
+                >
+                  <span className="material-symbols-outlined text-[18px]">add_circle</span>
+                  <span>+ Tambah Produk ke Katalog</span>
+                </a>
               </div>
             ) : filteredProducts.length === 0 ? (
               <div style={{textAlign: "center", padding: 60, color: "#94a3b8"}}>
@@ -657,6 +779,66 @@ export default function PosPage() {
         onSave={handleSaveCashDrawer}
         deviceLabel={deviceLabel || "Kasir"}
       />
+
+      {/* Modal Tambah Pelanggan Baru */}
+      {showAddCustomerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs select-none animate-fadeIn">
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 animate-scaleUp">
+            <div className="bg-gradient-to-r from-[#1b2e1f] to-emerald-800 p-4 text-white flex items-center justify-between border-b border-emerald-900">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-600/50 flex items-center justify-center text-white border border-emerald-400/30">
+                  <span className="material-symbols-outlined text-[20px]">person_add</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">Tambah Pelanggan Baru</h3>
+                  <p className="text-[11px] text-emerald-200">Tombol cepat kasir POS</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddCustomerModal(false)}
+                className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleAddCustomer} className="p-4 space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Nama Pelanggan / Warung
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  required
+                  placeholder="Contoh: Bu Siti Warung / Mas Joko"
+                  value={newCustomerName}
+                  onChange={(e) => setNewCustomerName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-emerald-600 rounded-xl text-sm font-semibold text-slate-800 outline-none transition-all"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Nama akan muncul sebagai tombol pilihan cepat di samping Walk-in (Umum) dan bisa dihapus kapan saja dengan tombol ✕.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddCustomerModal(false)}
+                  className="flex-1 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 cursor-pointer transition-all"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-md cursor-pointer transition-all"
+                >
+                  Simpan & Pilih
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

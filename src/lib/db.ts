@@ -90,12 +90,23 @@ function getRedis(): Redis | null {
   return _redis;
 }
 
+function cleanMockSeedProducts(products: Product[]): Product[] {
+  if (!Array.isArray(products) || products.length === 0) return [];
+  // If the product list is exclusively the mock seed items (prod-1 to prod-15), purge them to empty
+  const isSeedOnly = products.every((p) => {
+    const num = parseInt(p.id.replace("prod-", ""), 10);
+    return !isNaN(num) && num >= 1 && num <= 15 && p.id === `prod-${num}`;
+  });
+  if (isSeedOnly) return [];
+  return products;
+}
+
 function createInitialState(): DatabaseSchema {
   return {
-    products: JSON.parse(JSON.stringify(INITIAL_PRODUCTS)),
+    products: [],
     transactions: [],
     sales: [],
-    kasbon: JSON.parse(JSON.stringify(INITIAL_KASBON)),
+    kasbon: [],
     lastBackupDate: new Date().toISOString(),
   };
 }
@@ -144,10 +155,10 @@ function readLocalDb(deviceId: string): DatabaseSchema {
 
     const content = fs.readFileSync(filePath, "utf-8");
     const parsed = JSON.parse(content);
-    if (!parsed.products || parsed.products.length === 0) parsed.products = INITIAL_PRODUCTS;
+    parsed.products = cleanMockSeedProducts(parsed.products || []);
     if (!parsed.transactions) parsed.transactions = [];
     if (!parsed.sales) parsed.sales = [];
-    if (!parsed.kasbon) parsed.kasbon = INITIAL_KASBON;
+    if (!parsed.kasbon) parsed.kasbon = [];
     memDbByDevice[normId] = parsed;
     return parsed;
   } catch {
@@ -191,10 +202,10 @@ async function readBlobDb(deviceId: string): Promise<DatabaseSchema | null> {
     const res = await fetch(latestBlob.url, { cache: "no-store" });
     if (!res.ok) return null;
     const parsed = (await res.json()) as DatabaseSchema;
-    if (!parsed.products || parsed.products.length === 0) parsed.products = INITIAL_PRODUCTS;
+    parsed.products = cleanMockSeedProducts(parsed.products || []);
     if (!parsed.transactions) parsed.transactions = [];
     if (!parsed.sales) parsed.sales = [];
-    if (!parsed.kasbon) parsed.kasbon = INITIAL_KASBON;
+    if (!parsed.kasbon) parsed.kasbon = [];
     return parsed;
   } catch (err) {
     console.error("readBlobDb error:", err);
@@ -247,12 +258,13 @@ export async function getDbState(deviceId?: string): Promise<DatabaseSchema> {
         redis.get<SaleTransaction[]>(sKey),
         redis.get<KasbonRecord[]>(kKey),
       ]);
-      if (products && products.length > 0) {
+      if (products !== null && products !== undefined) {
+        const cleanedProducts = cleanMockSeedProducts(products);
         return {
-          products,
+          products: cleanedProducts,
           transactions: transactions || [],
           sales: sales || [],
-          kasbon: kasbon || INITIAL_KASBON,
+          kasbon: kasbon || [],
           lastBackupDate: new Date().toISOString(),
         };
       }
