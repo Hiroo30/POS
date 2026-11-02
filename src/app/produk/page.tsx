@@ -270,7 +270,7 @@ export default function ProdukPage() {
                   Komoditas Utama
                 </span>
                 <div className="mt-1 text-base md:text-lg font-bold text-slate-800 truncate">
-                  Beras, Minyak & Telur
+                  {categories.length > 0 ? categories.slice(0, 3).join(", ") : "Belum Ada Produk"}
                 </div>
               </div>
               <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600 shrink-0">
@@ -282,7 +282,7 @@ export default function ProdukPage() {
             <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-50 pt-2">
               <span className="flex items-center gap-1 text-orange-600 font-semibold">
                 <span className="material-symbols-outlined text-[14px]">bolt</span>
-                Turnover Cepat
+                {products.length > 0 ? "Turnover Cepat" : "Menunggu Produk"}
               </span>
               <span className="font-semibold text-slate-600">{categories.length} Kategori</span>
             </div>
@@ -307,7 +307,9 @@ export default function ProdukPage() {
             </div>
             <div className="mt-3 flex items-center justify-between text-[11px] border-t border-slate-50 pt-2">
               <span className="text-slate-500">Kebutuhan Pasar Subuh</span>
-              <span className="font-bold text-emerald-700">Agen Siap Proses</span>
+              <span className="font-bold text-emerald-700">
+                {lowStockItems.length > 0 ? "Perlu Kulakan" : "Stok Bersih"}
+              </span>
             </div>
           </div>
         </div>

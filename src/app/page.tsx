@@ -446,7 +446,9 @@ export default function PosPage() {
                     {formatRupiah(summary?.todayProfit ?? 0)}
                   </div>
                   <div style={{fontSize: 10, color: "#10b981", fontWeight: 600, marginTop: 2}}>
-                    +19.6% net margin
+                    {summary?.todayRevenue && summary.todayRevenue > 0
+                      ? `+${((summary.todayProfit / summary.todayRevenue) * 100).toFixed(1)}% net margin`
+                      : "0.0% net margin"}
                   </div>
                 </div>
                 <div style={{
