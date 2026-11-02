@@ -7,6 +7,7 @@ import PosProductCard from "@/components/PosProductCard";
 import CartSidebar from "@/components/CartSidebar";
 import CheckoutModal from "@/components/CheckoutModal";
 import ReceiptModal from "@/components/ReceiptModal";
+import CashDrawerModal from "@/components/CashDrawerModal";
 import { deviceFetch, getDeviceId, getDeviceLabel } from "@/lib/device";
 
 interface SummaryData {
@@ -46,22 +47,40 @@ export default function PosPage() {
   const [timeStr, setTimeStr] = useState("14:30 WIB");
   const [deviceId, setDeviceId] = useState("");
   const [deviceLabel, setDeviceLabel] = useState("");
+  const [cashDrawerAmount, setCashDrawerAmount] = useState<number>(1450000);
+  const [showCashDrawerModal, setShowCashDrawerModal] = useState<boolean>(false);
 
-  // Load per-device cart on mount
+  // Load per-device cart & cash drawer on mount
   useEffect(() => {
     const id = getDeviceId();
     setDeviceId(id);
     setDeviceLabel(getDeviceLabel());
     try {
-      const saved = localStorage.getItem(`pos_cart_${id}`);
-      if (saved) {
-        const parsed = JSON.parse(saved);
+      const savedCart = localStorage.getItem(`pos_cart_${id}`);
+      if (savedCart) {
+        const parsed = JSON.parse(savedCart);
         if (Array.isArray(parsed)) setCart(parsed);
+      }
+      const savedDrawer = localStorage.getItem(`pos_cash_drawer_${id}`);
+      if (savedDrawer) {
+        const num = parseInt(savedDrawer, 10);
+        if (!isNaN(num)) setCashDrawerAmount(num);
       }
     } catch {
       // fallback
     }
   }, []);
+
+  const handleSaveCashDrawer = (newAmount: number) => {
+    setCashDrawerAmount(newAmount);
+    try {
+      if (deviceId) {
+        localStorage.setItem(`pos_cash_drawer_${deviceId}`, newAmount.toString());
+      }
+    } catch {
+      // fallback
+    }
+  };
 
   // Save cart changes strictly scoped to this device
   useEffect(() => {
@@ -223,15 +242,23 @@ export default function PosPage() {
             <span>{deviceLabel || "Terminal POS"}</span>
           </div>
 
-          {/* Cash Drawer Pill */}
-          <div className="desktop-only" style={{
-            display: "flex", alignItems: "center", gap: 6,
-            background: "#f0fdf4", padding: "6px 12px", borderRadius: 8,
-            border: "1px solid #bbf7d0"
-          }}>
-            <span style={{fontSize: 11, color: "#166534", fontWeight: 600}}>Uang Laci:</span>
-            <span style={{fontSize: 12, fontWeight: 800, color: "#15803d"}}>Rp 1.450.000</span>
-          </div>
+          {/* Cash Drawer Pill (Interactive / Editable) */}
+          <button
+            type="button"
+            onClick={() => setShowCashDrawerModal(true)}
+            className="desktop-only flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100/90 border border-emerald-200 text-emerald-900 transition-all cursor-pointer shadow-2xs group"
+            title="Klik untuk ubah / sesuaikan saldo uang laci kasir"
+          >
+            <span className="text-[11px] text-emerald-800 font-semibold group-hover:text-emerald-900">
+              Uang Laci:
+            </span>
+            <span className="text-xs font-black text-emerald-700 group-hover:text-emerald-800">
+              {formatRupiah(cashDrawerAmount)}
+            </span>
+            <span className="material-symbols-outlined text-[15px] text-emerald-600 opacity-60 group-hover:opacity-100 transition-opacity">
+              edit
+            </span>
+          </button>
 
           {/* Time & Shift */}
           <div className="desktop-only" style={{fontSize: 11, color: "#64748b", fontWeight: 600}}>
@@ -276,7 +303,7 @@ export default function PosPage() {
           {/* Top Control Section */}
           <div className="p-3 md:p-4 bg-slate-50 border-b border-slate-200">
             {/* Mobile Barcode & Search Input (Visible on mobile only) */}
-            <div className="mobile-only relative mb-3">
+            <div className="mobile-only relative mb-2">
               <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">
                 search
               </span>
@@ -287,6 +314,20 @@ export default function PosPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-2xs"
               />
+            </div>
+
+            {/* Mobile Cash Drawer Bar */}
+            <div className="mobile-only flex items-center justify-between mb-3 px-0.5">
+              <button
+                type="button"
+                onClick={() => setShowCashDrawerModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold shadow-2xs cursor-pointer active:scale-95 transition-all"
+              >
+                <span className="material-symbols-outlined text-[16px] text-emerald-700">payments</span>
+                <span>Uang Laci: <strong className="text-emerald-700">{formatRupiah(cashDrawerAmount)}</strong></span>
+                <span className="material-symbols-outlined text-[13px] text-emerald-600">edit</span>
+              </button>
+              <span className="text-[11px] text-slate-500 font-medium">Shift 1 Pagi</span>
             </div>
             {/* Top Metrics Ribbon (Stitch Design: 4 KPIs) */}
             <div className="grid-3" style={{marginBottom: 10, gap: 10}}>
@@ -609,6 +650,13 @@ export default function PosPage() {
           onClose={() => setShowReceipt(false)}
         />
       )}
+      <CashDrawerModal
+        isOpen={showCashDrawerModal}
+        onClose={() => setShowCashDrawerModal(false)}
+        currentAmount={cashDrawerAmount}
+        onSave={handleSaveCashDrawer}
+        deviceLabel={deviceLabel || "Kasir"}
+      />
     </>
   );
 }

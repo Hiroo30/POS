@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { getDeviceId, getDeviceLabel, resetDeviceId, setDeviceCustomName } from "@/lib/device";
+import CashDrawerModal from "@/components/CashDrawerModal";
 
 type TabId = "cadangan" | "hardware" | "struk" | "device";
 
@@ -24,6 +25,8 @@ export default function MaintenancePage() {
   const [printerWidth, setPrinterWidth] = useState<"58mm" | "80mm">("58mm");
   const [testScanInput, setTestScanInput] = useState("");
   const [scaleWeight, setScaleWeight] = useState("0.000");
+  const [cashDrawerAmount, setCashDrawerAmount] = useState<number>(1450000);
+  const [showCashDrawerModal, setShowCashDrawerModal] = useState<boolean>(false);
 
   useEffect(() => {
     const id = getDeviceId();
@@ -31,7 +34,27 @@ export default function MaintenancePage() {
     const label = getDeviceLabel();
     setDeviceLabel(label);
     setCustomDeviceName(label);
+    try {
+      const saved = localStorage.getItem(`pos_cash_drawer_${id}`);
+      if (saved) {
+        const num = parseInt(saved, 10);
+        if (!isNaN(num)) setCashDrawerAmount(num);
+      }
+    } catch {}
   }, []);
+
+  const handleSaveCashDrawer = (newAmount: number) => {
+    setCashDrawerAmount(newAmount);
+    try {
+      if (deviceId) {
+        localStorage.setItem(`pos_cash_drawer_${deviceId}`, newAmount.toString());
+        setStatusMessage({
+          type: "success",
+          text: `Saldo uang laci ${deviceLabel} berhasil diperbarui: Rp ${newAmount.toLocaleString("id-ID")}`,
+        });
+      }
+    } catch {}
+  };
 
   const handleDownloadBackup = () => {
     window.open(`/api/maintenance?format=json&deviceId=${encodeURIComponent(deviceId)}`, "_blank");
@@ -554,13 +577,33 @@ export default function MaintenancePage() {
                   </span>
                 </div>
 
+                {/* Saldo Laci Current Status */}
+                <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-100 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] text-emerald-800 font-semibold block">
+                      Saldo Fisik Laci ({deviceLabel}):
+                    </span>
+                    <span className="text-base font-extrabold text-emerald-800">
+                      Rp {cashDrawerAmount.toLocaleString("id-ID")}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCashDrawerModal(true)}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">edit</span>
+                    <span>Ubah Saldo</span>
+                  </button>
+                </div>
+
                 <p className="text-xs text-slate-500">
                   Laci otomatis terbuka saat transaksi kasir tunai selesai dicetak.
                 </p>
 
                 <button
                   onClick={handleKickDrawer}
-                  className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+                  className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
                   type="button"
                 >
                   <span className="material-symbols-outlined text-[16px]">lock_open</span>
@@ -806,6 +849,14 @@ export default function MaintenancePage() {
           )}
         </main>
       </div>
+
+      <CashDrawerModal
+        isOpen={showCashDrawerModal}
+        onClose={() => setShowCashDrawerModal(false)}
+        currentAmount={cashDrawerAmount}
+        onSave={handleSaveCashDrawer}
+        deviceLabel={deviceLabel || "Kasir"}
+      />
     </div>
   );
 }
