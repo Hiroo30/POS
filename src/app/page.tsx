@@ -63,15 +63,23 @@ export default function PosPage() {
         const num = parseInt(savedDrawer, 10);
         if (!isNaN(num)) setCashDrawerAmount(num);
       }
+      try {
+        localStorage.removeItem("pos_customers");
+      } catch {}
       const savedCust = localStorage.getItem(`pos_customers_${id}`);
       if (savedCust) {
-        const parsedCust = JSON.parse(savedCust);
-        if (Array.isArray(parsedCust) && parsedCust.length > 0) {
-          // Remove old hardcoded demo customers if present
-          const cleanCust = parsedCust.filter((c: string) => c !== "Pak RT Bambang" && c !== "Bu Siti Warung");
-          if (!cleanCust.includes("Walk-in (Umum)")) cleanCust.unshift("Walk-in (Umum)");
-          setCustomers(cleanCust);
-        }
+        try {
+          const parsedCust = JSON.parse(savedCust);
+          if (Array.isArray(parsedCust)) {
+            // Remove old hardcoded demo customers if present
+            const cleanCust = parsedCust.filter((c: string) => c !== "Pak RT Bambang" && c !== "Bu Siti Warung");
+            if (!cleanCust.includes("Walk-in (Umum)")) cleanCust.unshift("Walk-in (Umum)");
+            setCustomers(cleanCust);
+            localStorage.setItem(`pos_customers_${id}`, JSON.stringify(cleanCust));
+          }
+        } catch {}
+      } else {
+        setCustomers(["Walk-in (Umum)"]);
       }
     } catch {
       // fallback

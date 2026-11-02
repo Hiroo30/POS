@@ -86,6 +86,7 @@ export async function deviceFetch(
   const urlWithDevice = `${input}${sep}deviceId=${encodeURIComponent(deviceId)}`;
 
   return fetch(urlWithDevice, {
+    cache: "no-store",
     ...init,
     headers,
   });

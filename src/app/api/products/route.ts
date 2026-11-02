@@ -5,7 +5,10 @@ export async function GET(request: Request) {
   try {
     const deviceId = getDeviceIdFromRequest(request);
     const products = await getProducts(deviceId);
-    return NextResponse.json({ success: true, data: products });
+    return NextResponse.json(
+      { success: true, data: products },
+      { headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" } }
+    );
   } catch (error) {
     console.error("Error fetching products:", error);
     return NextResponse.json(
