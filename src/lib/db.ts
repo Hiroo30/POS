@@ -495,6 +495,7 @@ export interface CreateSaleInput {
   paymentMethod: PaymentMethod;
   amountPaid: number;
   customerName?: string;
+  cashierName?: string;
   notes?: string;
   dueDate?: string; // Untuk Kasbon
 }
@@ -624,6 +625,7 @@ export async function processSale(
     customerName:
       input.customerName ||
       (input.paymentMethod === "KASBON" ? "Pelanggan Bon" : "Pelanggan Umum"),
+    cashierName: input.cashierName || "Kasir Dewi",
     notes: input.notes,
     createdAt: now.toISOString(),
   };

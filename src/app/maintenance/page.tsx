@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { getDeviceId, getDeviceLabel, resetDeviceId, setDeviceCustomName } from "@/lib/device";
+import { getStoreSettings, saveStoreSettings } from "@/lib/storeSettings";
 import CashDrawerModal from "@/components/CashDrawerModal";
 
 type TabId = "cadangan" | "hardware" | "struk" | "device";
@@ -17,11 +18,13 @@ export default function MaintenancePage() {
   } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Receipt format state (Strict defaults: Toko DEWI & 0823-2038-1500)
+  // Receipt & Store Settings
   const [storeName, setStoreName] = useState("TOKO DEWI");
   const [storeAddress, setStoreAddress] = useState("Jl. Melati No. 12, RT 02/RW 04");
   const [storePhone, setStorePhone] = useState("0823-2038-1500");
   const [receiptFooter, setReceiptFooter] = useState("Terima kasih telah berbelanja di Toko DEWI!");
+  const [cashierName, setCashierName] = useState("Kasir Dewi");
+  const [cashierRole, setCashierRole] = useState("Kasir Utama Toko");
   const [printerWidth, setPrinterWidth] = useState<"58mm" | "80mm">("58mm");
   const [testScanInput, setTestScanInput] = useState("");
   const [scaleWeight, setScaleWeight] = useState("0.000");
@@ -34,6 +37,15 @@ export default function MaintenancePage() {
     const label = getDeviceLabel();
     setDeviceLabel(label);
     setCustomDeviceName(label);
+
+    const settings = getStoreSettings();
+    setStoreName(settings.storeName);
+    setStoreAddress(settings.storeAddress);
+    setStorePhone(settings.storePhone);
+    setReceiptFooter(settings.receiptFooter);
+    setCashierName(settings.cashierName);
+    setCashierRole(settings.cashierRole);
+
     try {
       const saved = localStorage.getItem(`pos_cash_drawer_${id}`);
       if (saved) {
@@ -42,6 +54,21 @@ export default function MaintenancePage() {
       }
     } catch {}
   }, []);
+
+  const handleSaveReceiptSettings = () => {
+    saveStoreSettings({
+      storeName,
+      storeAddress,
+      storePhone,
+      receiptFooter,
+      cashierName,
+      cashierRole,
+    });
+    setStatusMessage({
+      type: "success",
+      text: `Pengaturan format struk & kasir (${cashierName}) berhasil disimpan!`,
+    });
+  };
 
   const handleSaveCashDrawer = (newAmount: number) => {
     setCashDrawerAmount(newAmount);
@@ -258,12 +285,9 @@ export default function MaintenancePage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => {
-              setStatusMessage({
-                type: "success",
-                text: "Semua pengaturan toko & terminal berhasil disimpan!",
-              });
+              handleSaveReceiptSettings();
             }}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs md:text-sm font-bold shadow-sm transition-all active:scale-95"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs md:text-sm font-bold shadow-sm transition-all active:scale-95 cursor-pointer"
             type="button"
           >
             <span className="material-symbols-outlined text-[18px]">check_circle</span>
@@ -654,70 +678,104 @@ export default function MaintenancePage() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Form Input */}
               <div className="lg:col-span-7 bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
-                <h3 className="font-bold text-slate-800 text-base">Format Kepala & Kaki Struk</h3>
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <h3 className="font-bold text-slate-800 text-base">Format Kepala, Kasir & Kaki Struk</h3>
+                  <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold">
+                    Thermal 58mm / 80mm
+                  </span>
+                </div>
 
-                <div className="space-y-3 text-xs">
+                <div className="space-y-3.5 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-700 font-semibold mb-1">
+                        Nama Petugas Kasir
+                      </label>
+                      <input
+                        type="text"
+                        value={cashierName}
+                        onChange={(e) => setCashierName(e.target.value)}
+                        placeholder="Contoh: Kasir Dewi / Ibu Dewi / Eksa"
+                        className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-900 font-bold text-xs focus:bg-white focus:border-emerald-500 focus:outline-none transition-all"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">Nama yang tercetak di baris "Kasir:" pada nota.</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-700 font-semibold mb-1">
+                        Peran / Jabatan Kasir
+                      </label>
+                      <input
+                        type="text"
+                        value={cashierRole}
+                        onChange={(e) => setCashierRole(e.target.value)}
+                        placeholder="Contoh: Kasir Utama Toko / Owner / Shift 1"
+                        className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-900 text-xs focus:bg-white focus:border-emerald-500 focus:outline-none transition-all"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">Ditampilkan di profil kasir sidebar.</p>
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="block text-slate-600 font-semibold mb-1">
+                    <label className="block text-slate-700 font-semibold mb-1">
                       Nama Toko / Warung di Struk
                     </label>
                     <input
                       type="text"
                       value={storeName}
                       onChange={(e) => setStoreName(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-900 font-bold text-sm"
+                      className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-900 font-bold text-sm focus:bg-white focus:border-emerald-500 focus:outline-none transition-all"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-600 font-semibold mb-1">
+                    <label className="block text-slate-700 font-semibold mb-1">
                       Alamat Lengkap Toko
                     </label>
                     <textarea
                       rows={2}
                       value={storeAddress}
                       onChange={(e) => setStoreAddress(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-900 text-xs"
+                      className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-900 text-xs focus:bg-white focus:border-emerald-500 focus:outline-none transition-all"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-600 font-semibold mb-1">
-                      Nomor WhatsApp Pelanggan
+                    <label className="block text-slate-700 font-semibold mb-1">
+                      Nomor WhatsApp Toko / Penjual (Dicetak di Struk)
                     </label>
                     <input
                       type="text"
                       value={storePhone}
                       onChange={(e) => setStorePhone(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-900 font-mono text-xs"
+                      placeholder="Contoh: 0823-2038-1500"
+                      className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-900 font-mono text-xs focus:bg-white focus:border-emerald-500 focus:outline-none transition-all"
                     />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      *Nomor kontak WhatsApp toko/penjual agar pembeli dapat menghubungi warung untuk pesanan atau info produk.
+                    </p>
                   </div>
 
                   <div>
-                    <label className="block text-slate-600 font-semibold mb-1">
+                    <label className="block text-slate-700 font-semibold mb-1">
                       Pesan Kaki Struk (Footer)
                     </label>
                     <input
                       type="text"
                       value={receiptFooter}
                       onChange={(e) => setReceiptFooter(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-900 text-xs"
+                      className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-900 text-xs focus:bg-white focus:border-emerald-500 focus:outline-none transition-all"
                     />
                   </div>
                 </div>
 
                 <button
-                  onClick={() => {
-                    setStatusMessage({
-                      type: "success",
-                      text: "Format struk Toko DEWI berhasil diperbarui!",
-                    });
-                  }}
-                  className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
+                  onClick={handleSaveReceiptSettings}
+                  className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95 cursor-pointer"
                   type="button"
                 >
                   <span className="material-symbols-outlined text-[16px]">save</span>
-                  <span>Simpan Format Struk</span>
+                  <span>Simpan Format Struk & Profil Kasir</span>
                 </button>
               </div>
 
@@ -738,7 +796,7 @@ export default function MaintenancePage() {
                     <span>NOTA: NOTA-20261102-1234</span>
                   </div>
                   <div className="flex justify-between text-[10px]">
-                    <span>Kasir: Kasir Dewi</span>
+                    <span className="font-bold text-emerald-800">Kasir: {cashierName}</span>
                     <span>14:32 WIB</span>
                   </div>
                   <div className="border-b border-dashed border-slate-400 my-2"></div>

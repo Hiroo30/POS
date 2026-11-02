@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { CartItem, SaleTransaction } from "@/lib/types";
 import { deviceFetch } from "@/lib/device";
+import { getStoreSettings } from "@/lib/storeSettings";
 
 interface Props {
   cart: CartItem[];
@@ -72,6 +73,7 @@ export default function CheckoutModal({ cart, totalAmount, onClose, onSuccess }:
           paymentMethod,
           amountPaid: paymentMethod === "TUNAI" ? cashAmount : totalAmount,
           customerName: customerName.trim() || undefined,
+          cashierName: getStoreSettings().cashierName,
           notes: notes.trim() || undefined,
           dueDate: paymentMethod === "KASBON" ? dueDate : undefined,
         }),

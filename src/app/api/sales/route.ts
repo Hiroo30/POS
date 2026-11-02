@@ -33,6 +33,7 @@ export async function POST(request: Request) {
       paymentMethod: body.paymentMethod || "TUNAI",
       amountPaid: Number(body.amountPaid) || 0,
       customerName: body.customerName,
+      cashierName: body.cashierName,
       notes: body.notes,
       dueDate: body.dueDate,
     }, deviceId);

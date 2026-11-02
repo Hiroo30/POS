@@ -4,6 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getDeviceId, getDeviceLabel } from "@/lib/device";
+import {
+  getStoreSettings,
+  saveStoreSettings,
+  getCashierInitials,
+  DEFAULT_STORE_SETTINGS,
+  type StoreSettings,
+} from "@/lib/storeSettings";
 
 const navItems = [
   {
@@ -48,11 +55,36 @@ export default function Navbar() {
   const pathname = usePathname();
   const [deviceLabel, setDeviceLabel] = useState("Memuat Terminal...");
   const [deviceId, setDeviceId] = useState("");
+  const [storeSettings, setStoreSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editRole, setEditRole] = useState("");
 
   useEffect(() => {
     setDeviceLabel(getDeviceLabel());
     setDeviceId(getDeviceId());
+
+    const updateSettings = () => {
+      setStoreSettings(getStoreSettings());
+    };
+    updateSettings();
+    window.addEventListener("pos-settings-updated", updateSettings);
+    window.addEventListener("storage", updateSettings);
+    return () => {
+      window.removeEventListener("pos-settings-updated", updateSettings);
+      window.removeEventListener("storage", updateSettings);
+    };
   }, []);
+
+  const handleSaveCashier = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editName.trim()) return;
+    saveStoreSettings({
+      cashierName: editName.trim(),
+      cashierRole: editRole.trim() || "Kasir Toko",
+    });
+    setShowEditModal(false);
+  };
 
   const currentPage = navItems.find((item) => item.href === pathname)?.shortLabel || "POS";
 
@@ -141,22 +173,40 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Bottom Cashier Profile */}
+        {/* Bottom Cashier Profile (Clickable to Edit) */}
         <div className="p-3 border-t border-white/10 bg-black/20">
-          <div className="p-2.5 rounded-xl bg-white/5 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => {
+              setEditName(storeSettings.cashierName);
+              setEditRole(storeSettings.cashierRole);
+              setShowEditModal(true);
+            }}
+            className="w-full p-2.5 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-between text-left transition-all group cursor-pointer border border-transparent hover:border-emerald-500/30 active:scale-98"
+            title="Klik untuk ubah nama atau profil kasir"
+          >
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center font-bold text-xs text-white shrink-0">
-                KD
+              <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center font-bold text-xs text-white shrink-0 group-hover:scale-105 transition-transform shadow-xs">
+                {getCashierInitials(storeSettings.cashierName)}
               </div>
               <div className="min-w-0">
-                <span className="block text-xs font-bold text-white truncate">Kasir Dewi</span>
-                <span className="block text-[10px] text-slate-400 truncate">Kasir Utama Toko</span>
+                <div className="flex items-center gap-1">
+                  <span className="block text-xs font-bold text-white truncate group-hover:text-emerald-300 transition-colors">
+                    {storeSettings.cashierName}
+                  </span>
+                  <span className="material-symbols-outlined text-[13px] text-emerald-400 opacity-60 group-hover:opacity-100 transition-opacity">
+                    edit
+                  </span>
+                </div>
+                <span className="block text-[10px] text-slate-400 truncate">
+                  {storeSettings.cashierRole}
+                </span>
               </div>
             </div>
-            <span className="text-[10px] text-emerald-300 font-bold px-2 py-0.5 rounded bg-emerald-900/60">
-              Toko DEWI
+            <span className="text-[10px] text-emerald-300 font-bold px-2 py-0.5 rounded bg-emerald-900/60 shrink-0">
+              {storeSettings.storeName}
             </span>
-          </div>
+          </button>
         </div>
       </aside>
 
@@ -170,7 +220,7 @@ export default function Navbar() {
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span className="text-[10px] text-emerald-700 font-bold uppercase tracking-wider">
-                Online · Toko DEWI
+                Online · {storeSettings.storeName}
               </span>
             </div>
             <h1 className="text-xs font-bold text-slate-900 truncate -mt-0.5">
@@ -179,16 +229,27 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Mobile Device & Shift Pill */}
+        {/* Mobile Device & Cashier Pill */}
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
-            Shift 1
-          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setEditName(storeSettings.cashierName);
+              setEditRole(storeSettings.cashierRole);
+              setShowEditModal(true);
+            }}
+            className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold flex items-center gap-1 cursor-pointer active:scale-95"
+            title="Klik untuk ubah nama kasir"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            <span className="truncate max-w-[80px]">{storeSettings.cashierName}</span>
+            <span className="material-symbols-outlined text-[12px] text-emerald-600">edit</span>
+          </button>
           <span
-            className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-semibold truncate max-w-[110px]"
+            className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-semibold truncate max-w-[105px]"
             title={`Device ID: ${deviceId}`}
           >
-            {deviceLabel.includes("HP") ? "📱 Kasir HP" : "💻 Kasir Laptop"}
+            {deviceLabel.includes("HP") ? "📱 HP" : "💻 Laptop"}
           </span>
         </div>
       </header>
@@ -222,6 +283,99 @@ export default function Navbar() {
           );
         })}
       </nav>
+
+      {/* ─── MODAL EDIT KASIR ─── */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-xs shadow-xs">
+                  {getCashierInitials(editName || storeSettings.cashierName)}
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900">Ubah Profil Kasir</h3>
+                  <p className="text-[11px] text-slate-500">Dicetak di struk & laporan transaksi</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCashier} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  Nama Petugas Kasir
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Contoh: Ibu Dewi / Eksa / Kasir 1"
+                  required
+                  autoFocus
+                  className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-900 font-bold text-sm focus:bg-white focus:border-emerald-500 focus:outline-none transition-all"
+                />
+              </div>
+
+              {/* Quick Preset Pills */}
+              <div>
+                <span className="block text-[11px] text-slate-500 mb-1.5 font-medium">Pilihan Cepat:</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {["Ibu Dewi", "Eksa", "Kasir 1", "Owner"].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setEditName(preset)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                        editName === preset
+                          ? "bg-emerald-600 text-white shadow-xs"
+                          : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  Peran / Keterangan (Opsional)
+                </label>
+                <input
+                  type="text"
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value)}
+                  placeholder="Contoh: Kasir Utama Toko / Shift Pagi"
+                  className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-900 text-xs focus:bg-white focus:border-emerald-500 focus:outline-none transition-all"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-colors shadow-sm cursor-pointer"
+                >
+                  Simpan Kasir
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

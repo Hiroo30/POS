@@ -94,6 +94,7 @@ export interface SaleTransaction {
   amountPaid: number;
   changeAmount: number;
   customerName?: string;
+  cashierName?: string;
   notes?: string;
   createdAt: string;
 }

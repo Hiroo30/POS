@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import type { SaleTransaction, Transaction } from "@/lib/types";
 import { formatRupiah, formatDateTime } from "@/lib/formatters";
 import { deviceFetch } from "@/lib/device";
+import { getStoreSettings } from "@/lib/storeSettings";
 import Link from "next/link";
 
 type TabType = "SALES" | "MUTASI";
@@ -178,13 +179,16 @@ export default function RiwayatPage() {
       )
       .join("\n");
 
+    const settings = getStoreSettings();
+    const cashier = sale.cashierName || settings.cashierName;
     const message = [
-      `*TOKO DEWI — BUKTI STRUK TRANSAKSI*`,
+      `*${settings.storeName} — BUKTI STRUK TRANSAKSI*`,
       `================================`,
       `No. Nota : *${sale.receiptNo}*`,
       `Waktu    : ${formatDateTime(sale.createdAt)}`,
       `Pelanggan: ${sale.customerName || "Pelanggan Umum"}`,
-      `Kasir    : Kasir Dewi`,
+      `Kasir    : ${cashier}`,
+      `WA Toko  : ${settings.storePhone}`,
       `================================`,
       itemsText,
       `--------------------------------`,
@@ -197,8 +201,8 @@ export default function RiwayatPage() {
           ]
         : []),
       `================================`,
-      `Terima kasih telah berbelanja di *Toko DEWI*!`,
-      `Alamat & WA: 0823-2038-1500`,
+      settings.receiptFooter || `Terima kasih telah berbelanja di *${settings.storeName}*!`,
+      `Alamat & WA: ${settings.storePhone}`,
     ].join("\n");
 
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, "_blank");
@@ -679,13 +683,13 @@ export default function RiwayatPage() {
                     {/* Store Header */}
                     <div className="text-center pb-3">
                       <div className="font-black text-lg tracking-wider text-slate-900">
-                        TOKO DEWI
+                        {getStoreSettings().storeName}
                       </div>
                       <div className="text-[11px] font-bold text-slate-600">
-                        Warung Sembako & Kebutuhan Rumah
+                        {getStoreSettings().storeAddress}
                       </div>
                       <div className="text-[10px] text-slate-500 mt-0.5">
-                        Telp / WA: 0823-2038-1500
+                        Telp / WA: {getStoreSettings().storePhone}
                       </div>
                     </div>
 
@@ -704,7 +708,7 @@ export default function RiwayatPage() {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Kasir:</span>
-                        <span>Kasir Dewi (Kasir Utama)</span>
+                        <span>{selectedSale.cashierName || getStoreSettings().cashierName}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Pelanggan:</span>
@@ -787,8 +791,8 @@ export default function RiwayatPage() {
                     {/* Thank You Note */}
                     <div className="text-center text-[10px] text-slate-500 space-y-1">
                       <p className="font-bold text-slate-700">TERIMA KASIH ATAS KUNJUNGAN ANDA!</p>
-                      <p>Barang yang sudah dibeli tidak dapat ditukar atau dikembalikan.</p>
-                      <p className="text-[9px] text-slate-400">Layanan Pelanggan: 0823-2038-1500</p>
+                      <p>{getStoreSettings().receiptFooter}</p>
+                      <p className="text-[9px] text-slate-400">Layanan Pelanggan / WA: {getStoreSettings().storePhone}</p>
                     </div>
 
                     {/* Visual Barcode Graphic */}

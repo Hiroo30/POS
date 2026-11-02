@@ -2,6 +2,7 @@
 
 import type { SaleTransaction } from "@/lib/types";
 import { formatRupiah, formatDateTime } from "@/lib/formatters";
+import { getStoreSettings } from "@/lib/storeSettings";
 
 interface Props {
   sale: SaleTransaction;
@@ -12,13 +13,17 @@ export default function ReceiptModal({ sale, onClose }: Props) {
   const handlePrint = () => window.print();
 
   const handleShareWhatsApp = () => {
+    const settings = getStoreSettings();
+    const cashier = sale.cashierName || settings.cashierName;
     const lines = [
-      `*TOKO DEWI*`,
+      `*${settings.storeName}*`,
       `*BUKTI PEMBAYARAN*`,
       `================================`,
-      `No. Nota: ${sale.receiptNo}`,
-      `Waktu   : ${formatDateTime(sale.createdAt)}`,
+      `No. Nota : ${sale.receiptNo}`,
+      `Waktu    : ${formatDateTime(sale.createdAt)}`,
       `Pelanggan: ${sale.customerName || "Umum"}`,
+      `Kasir    : ${cashier}`,
+      `WA Toko  : ${settings.storePhone}`,
       `================================`,
       ...sale.items.map(
         (it) => `${it.productName}\n  ${it.quantity} ${it.unitLabel} x ${formatRupiah(it.pricePerUnit)} = ${formatRupiah(it.subtotal)}`
@@ -30,7 +35,7 @@ export default function ReceiptModal({ sale, onClose }: Props) {
         ? [`Tunai: ${formatRupiah(sale.amountPaid)}`, `Kembalian: ${formatRupiah(sale.changeAmount)}`]
         : []),
       `================================`,
-      `Terima kasih telah berbelanja!`,
+      settings.receiptFooter || `Terima kasih telah berbelanja!`,
     ];
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(lines.join("\n"))}`, "_blank");
   };
@@ -61,8 +66,9 @@ export default function ReceiptModal({ sale, onClose }: Props) {
         <div className="kp-receipt select-text" style={{margin:"16px 16px 0"}}>
           {/* Store info */}
           <div style={{textAlign:"center", marginBottom:12}}>
-            <div style={{fontWeight:900, fontSize:14, letterSpacing:0.5}}>TOKO DEWI</div>
-            <div style={{fontSize:10, color:"#64748b"}}>Telp / WA: 0823-2038-1500 </div>
+            <div style={{fontWeight:900, fontSize:14, letterSpacing:0.5}}>{getStoreSettings().storeName}</div>
+            <div style={{fontSize:10, color:"#64748b"}}>{getStoreSettings().storeAddress}</div>
+            <div style={{fontSize:10, color:"#64748b"}}>Telp / WA: {getStoreSettings().storePhone}</div>
           </div>
 
           <div className="kp-receipt-divider" />
@@ -73,7 +79,7 @@ export default function ReceiptModal({ sale, onClose }: Props) {
               ["No. Nota", sale.receiptNo],
               ["Waktu", formatDateTime(sale.createdAt)],
               ["Pelanggan", sale.customerName || "Pelanggan Umum"],
-              ["Kasir", "Kasir 1"],
+              ["Kasir", sale.cashierName || getStoreSettings().cashierName || "Kasir Dewi"],
             ].map(([label, val]) => (
               <div key={label} style={{display:"flex", justifyContent:"space-between", marginBottom:2}}>
                 <span style={{color:"#64748b"}}>{label}:</span>
@@ -136,7 +142,9 @@ export default function ReceiptModal({ sale, onClose }: Props) {
               ||||| |||| ||| ||||||
             </div>
             <div style={{fontSize:9, letterSpacing:3, color:"#94a3b8"}}>{sale.receiptNo}</div>
-            <div style={{fontSize:10, color:"#64748b", marginTop:6}}>Terima kasih atas kunjungan Anda!</div>
+            <div style={{fontSize:10, color:"#64748b", marginTop:6}}>
+              {getStoreSettings().receiptFooter || "Terima kasih atas kunjungan Anda!"}
+            </div>
           </div>
         </div>
 
