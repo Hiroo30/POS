@@ -1,12 +1,23 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
+import PwaInstallPrompt from "@/components/PwaInstallPrompt";
 
 export const metadata: Metadata = {
-  title: "Kasir Pintar Sembako — POS & Manajemen Stok Toko",
+  title: "Toko DEWI — Kasir Pintar Sembako & Manajemen Toko",
   description:
-    "Aplikasi Kasir Pintar POS dan Manajemen Stok Toko Sembako modern, cepat, dan ramah pengguna.",
-  icons: { icon: "/favicon.ico" },
+    "Aplikasi Kasir Pintar POS, Katalog Stok, dan Pembukuan Toko Sembako DEWI modern, cepat, dan ramah pengguna.",
+  manifest: "/manifest.json",
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/apple-touch-icon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Toko DEWI",
+  },
+  applicationName: "Toko DEWI",
 };
 
 export const viewport: Viewport = {
@@ -14,7 +25,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#1b2e1f",
+  themeColor: "#006c49",
 };
 
 export default function RootLayout({
@@ -35,6 +46,12 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
           rel="stylesheet"
         />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Toko DEWI" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
       <body className="h-full bg-[#f4f6fb] text-[#131b2e] antialiased">
         <div className="min-h-screen flex flex-col md:flex-row">
@@ -43,6 +60,7 @@ export default function RootLayout({
             {children}
           </main>
         </div>
+        <PwaInstallPrompt />
       </body>
     </html>
   );

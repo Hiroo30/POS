@@ -118,6 +118,20 @@ export default function Navbar() {
                 );
               })}
             </nav>
+
+            {/* Install App Shortcut */}
+            <div className="px-3 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(new Event("trigger-pwa-install"));
+                }}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-300 hover:text-white text-xs font-bold transition-all border border-emerald-500/20 shadow-xs cursor-pointer active:scale-95"
+              >
+                <span className="material-symbols-outlined text-[18px]">install_mobile</span>
+                <span>Pasang Aplikasi</span>
+              </button>
+            </div>
           </div>
         </div>
 
