@@ -101,6 +101,17 @@ function cleanMockSeedProducts(products: Product[]): Product[] {
   return products;
 }
 
+function cleanOrphanTransactions(
+  transactions: Transaction[],
+  products: Product[]
+): Transaction[] {
+  if (!Array.isArray(transactions) || transactions.length === 0) return [];
+  // If product list is completely empty, purge all transactions to ensure 100% clean zero state
+  if (!products || products.length === 0) return [];
+  const validProductIds = new Set(products.map((p) => p.id));
+  return transactions.filter((t) => validProductIds.has(t.productId));
+}
+
 function createInitialState(): DatabaseSchema {
   return {
     products: [],
@@ -156,7 +167,7 @@ function readLocalDb(deviceId: string): DatabaseSchema {
     const content = fs.readFileSync(filePath, "utf-8");
     const parsed = JSON.parse(content);
     parsed.products = cleanMockSeedProducts(parsed.products || []);
-    if (!parsed.transactions) parsed.transactions = [];
+    parsed.transactions = cleanOrphanTransactions(parsed.transactions || [], parsed.products);
     if (!parsed.sales) parsed.sales = [];
     if (!parsed.kasbon) parsed.kasbon = [];
     memDbByDevice[normId] = parsed;
@@ -203,7 +214,7 @@ async function readBlobDb(deviceId: string): Promise<DatabaseSchema | null> {
     if (!res.ok) return null;
     const parsed = (await res.json()) as DatabaseSchema;
     parsed.products = cleanMockSeedProducts(parsed.products || []);
-    if (!parsed.transactions) parsed.transactions = [];
+    parsed.transactions = cleanOrphanTransactions(parsed.transactions || [], parsed.products);
     if (!parsed.sales) parsed.sales = [];
     if (!parsed.kasbon) parsed.kasbon = [];
     return parsed;
@@ -262,7 +273,7 @@ export async function getDbState(deviceId?: string): Promise<DatabaseSchema> {
         const cleanedProducts = cleanMockSeedProducts(products);
         return {
           products: cleanedProducts,
-          transactions: transactions || [],
+          transactions: cleanOrphanTransactions(transactions || [], cleanedProducts),
           sales: sales || [],
           kasbon: kasbon || [],
           lastBackupDate: new Date().toISOString(),
@@ -769,6 +780,27 @@ export async function getTransactions(
     list = list.filter((t) => t.productId === productId);
   }
   return list.slice(0, limit);
+}
+
+export async function clearAllTransactions(deviceId?: string): Promise<void> {
+  const db = await getDbState(deviceId);
+  db.transactions = [];
+  await saveDbState(db, deviceId);
+}
+
+export async function deleteTransaction(
+  id: string,
+  deviceId?: string
+): Promise<boolean> {
+  const db = await getDbState(deviceId);
+  if (!db.transactions) return false;
+  const initialLen = db.transactions.length;
+  db.transactions = db.transactions.filter((t) => t.id !== id);
+  if (db.transactions.length !== initialLen) {
+    await saveDbState(db, deviceId);
+    return true;
+  }
+  return false;
 }
 
 // ─── Summary ──────────────────────────────────────────────────────────────────

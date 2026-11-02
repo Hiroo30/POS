@@ -38,6 +38,8 @@ export default function RiwayatPage() {
   // Void confirmation state
   const [saleToVoid, setSaleToVoid] = useState<SaleTransaction | null>(null);
   const [isVoiding, setIsVoiding] = useState<boolean>(false);
+  const [showClearMutasiModal, setShowClearMutasiModal] = useState<boolean>(false);
+  const [isClearingMutasi, setIsClearingMutasi] = useState<boolean>(false);
   const [feedbackMessage, setFeedbackMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   // Initialize date bounds on client mount to avoid SSR prerender issues
@@ -213,6 +215,42 @@ export default function RiwayatPage() {
     const raw = `TOKO DEWI - NOTA ${sale.receiptNo}\nWaktu: ${formatDateTime(sale.createdAt)}\nPelanggan: ${sale.customerName || "Umum"}\nTotal: ${formatRupiah(sale.totalAmount)}\nBayar: ${sale.paymentMethod}\n\nItem:\n${itemsText}`;
     navigator.clipboard.writeText(raw);
     showFeedback("Teks bukti struk berhasil disalin ke clipboard!", "success");
+  };
+
+  // Handle Clear All Mutations
+  const handleClearAllMutations = async () => {
+    setIsClearingMutasi(true);
+    try {
+      const res = await deviceFetch("/api/transactions", { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal mengosongkan mutasi");
+      }
+      setMutasi([]);
+      showFeedback("Seluruh riwayat mutasi stok berhasil dibersihkan!", "success");
+    } catch (err: any) {
+      showFeedback(err.message || "Gagal mengosongkan riwayat mutasi.", "error");
+    } finally {
+      setIsClearingMutasi(false);
+      setShowClearMutasiModal(false);
+    }
+  };
+
+  // Handle Delete Single Mutation
+  const handleDeleteSingleMutation = async (id: string) => {
+    try {
+      const res = await deviceFetch(`/api/transactions?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menghapus mutasi");
+      }
+      setMutasi((prev) => prev.filter((m) => m.id !== id));
+      showFeedback("Catatan mutasi stok berhasil dihapus!", "success");
+    } catch (err: any) {
+      showFeedback(err.message || "Gagal menghapus mutasi.", "error");
+    }
   };
 
   return (
@@ -798,13 +836,23 @@ export default function RiwayatPage() {
         ) : (
           /* ─── TAB 2: MUTASI STOK GUDANG ─── */
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h3 className="font-bold text-slate-900 text-sm">Riwayat Keluar Masuk Barang Gudang</h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Catatan mutasi stok barang saat kulakan, penyesuaian opname, dan penjualan
                 </p>
               </div>
+              {mutasi.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowClearMutasiModal(true)}
+                  className="px-3 py-1.5 rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer self-start sm:self-auto active:scale-95 shadow-xs"
+                >
+                  <span className="material-symbols-outlined text-[16px]">delete_sweep</span>
+                  <span>Kosongkan Riwayat Mutasi ({mutasi.length})</span>
+                </button>
+              )}
             </div>
 
             <div className="overflow-x-auto">
@@ -817,18 +865,25 @@ export default function RiwayatPage() {
                     <th className="py-3 px-4">Jumlah</th>
                     <th className="py-3 px-4">Stok Sebelum → Sesudah</th>
                     <th className="py-3 px-4">Catatan</th>
+                    <th className="py-3 px-4 text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {mutasi.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-400">
-                        Belum ada mutasi stok tercatat.
+                      <td colSpan={7} className="py-12 text-center text-slate-400">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2">
+                          <span className="material-symbols-outlined text-[26px]">swap_horiz</span>
+                        </div>
+                        <span className="font-bold text-slate-600 block">Riwayat Mutasi Stok Kosong</span>
+                        <span className="text-[11px] text-slate-400 mt-0.5 block">
+                          Belum ada mutasi keluar masuk barang yang tercatat.
+                        </span>
                       </td>
                     </tr>
                   ) : (
                     mutasi.map((m) => (
-                      <tr key={m.id} className="hover:bg-slate-50/60">
+                      <tr key={m.id} className="hover:bg-slate-50/60 transition">
                         <td className="py-3 px-4 font-mono text-[11px] text-slate-500">
                           {formatDateTime(m.createdAt)}
                         </td>
@@ -854,6 +909,16 @@ export default function RiwayatPage() {
                           {m.stockBefore} → <span className="font-bold text-slate-900">{m.stockAfter}</span>
                         </td>
                         <td className="py-3 px-4 text-slate-500">{m.note || "-"}</td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSingleMutation(m.id)}
+                            className="p-1 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                            title="Hapus riwayat mutasi ini"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">delete</span>
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -899,6 +964,47 @@ export default function RiwayatPage() {
                   </>
                 ) : (
                   <span>Ya, Batalkan</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL KONFIRMASI KOSONGKAN MUTASI STOK ─── */}
+      {showClearMutasiModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 animate-scaleUp">
+            <div className="w-12 h-12 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center mb-3">
+              <span className="material-symbols-outlined text-[28px]">delete_sweep</span>
+            </div>
+            <h3 className="text-base font-bold text-slate-900">Kosongkan Semua Mutasi?</h3>
+            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+              Semua <strong>{mutasi.length} catatan riwayat mutasi stok</strong> lama akan dihapus permanen sehingga Anda bisa mulai bersih dari nol.
+            </p>
+
+            <div className="flex items-center gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => setShowClearMutasiModal(false)}
+                disabled={isClearingMutasi}
+                className="flex-1 py-2 px-3 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-50 transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleClearAllMutations}
+                disabled={isClearingMutasi}
+                className="flex-1 py-2 px-3 bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                {isClearingMutasi ? (
+                  <>
+                    <span className="material-symbols-outlined text-[14px] animate-spin">sync</span>
+                    <span>Menghapus...</span>
+                  </>
+                ) : (
+                  <span>Ya, Kosongkan</span>
                 )}
               </button>
             </div>

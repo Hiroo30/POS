@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { getTransactions, recordStockMutation, getDeviceIdFromRequest } from "@/lib/db";
+import {
+  getTransactions,
+  recordStockMutation,
+  clearAllTransactions,
+  deleteTransaction,
+  getDeviceIdFromRequest,
+} from "@/lib/db";
 
 export async function GET(request: Request) {
   try {
@@ -68,6 +74,41 @@ export async function POST(request: Request) {
     console.error("Error creating stock mutation:", error);
     return NextResponse.json(
       { success: false, error: "Gagal memproses transaksi stok" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const deviceId = getDeviceIdFromRequest(request);
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+
+    if (id) {
+      const ok = await deleteTransaction(id, deviceId);
+      if (!ok) {
+        return NextResponse.json(
+          { success: false, error: "Transaksi mutasi stok tidak ditemukan" },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json({
+        success: true,
+        message: "Catatan mutasi stok berhasil dihapus",
+      });
+    }
+
+    // Clear all transactions for this device
+    await clearAllTransactions(deviceId);
+    return NextResponse.json({
+      success: true,
+      message: "Seluruh riwayat mutasi stok berhasil dibersihkan",
+    });
+  } catch (error) {
+    console.error("Error clearing transactions:", error);
+    return NextResponse.json(
+      { success: false, error: "Gagal membersihkan riwayat transaksi stok" },
       { status: 500 }
     );
   }
