@@ -1,8 +1,9 @@
 {
+  "id": "/",
   "name": "Aplikasi Inventori",
-  "short_name": "Aplikasi Inventori",
+  "short_name": "Inventori",
   "description": "Aplikasi Inventori dan POS Toko Sembako DEWI",
-  "start_url": "/?source=pwa",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#006c49",
