@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { getKasbonList, addKasbonManual, payKasbon } from "@/lib/db";
+import { getKasbonList, addKasbonManual, payKasbon, getDeviceIdFromRequest } from "@/lib/db";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const list = await getKasbonList();
+    const deviceId = getDeviceIdFromRequest(request);
+    const list = await getKasbonList(deviceId);
     return NextResponse.json({ success: true, data: list });
   } catch (error) {
     console.error("Error fetching kasbon:", error);
@@ -16,6 +17,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const deviceId = getDeviceIdFromRequest(request);
     const body = await request.json();
     if (!body.customerName || !body.amount) {
       return NextResponse.json(
@@ -31,7 +33,7 @@ export async function POST(request: Request) {
       amount: Number(body.amount),
       dueDate: body.dueDate,
       notes: body.notes,
-    });
+    }, deviceId);
 
     return NextResponse.json({
       success: true,
@@ -49,18 +51,19 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const deviceId = getDeviceIdFromRequest(request);
     const body = await request.json();
     if (!body.id || body.amount === undefined) {
       return NextResponse.json(
-        { success: false, error: "ID kasbon dan nominal pembayaran wajib diisi" },
+        { success: false, error: "ID dan jumlah pelunasan wajib diisi" },
         { status: 400 }
       );
     }
 
-    const updated = await payKasbon(body.id, Number(body.amount));
+    const updated = await payKasbon(body.id, Number(body.amount), deviceId);
     if (!updated) {
       return NextResponse.json(
-        { success: false, error: "Catatan kasbon tidak ditemukan" },
+        { success: false, error: "Data kasbon tidak ditemukan" },
         { status: 404 }
       );
     }
@@ -70,13 +73,13 @@ export async function PUT(request: Request) {
       data: updated,
       message:
         updated.status === "LUNAS"
-          ? "Kasbon berhasil DILUNASI!"
-          : "Pembayaran kasbon berhasil dicatat",
+          ? "Hutang kasbon telah LUNAS sepenuhnya!"
+          : "Pembayaran cicilan kasbon berhasil dicatat",
     });
   } catch (error) {
-    console.error("Error paying kasbon:", error);
+    console.error("Error updating kasbon:", error);
     return NextResponse.json(
-      { success: false, error: "Gagal memperbarui kasbon" },
+      { success: false, error: "Gagal memproses pembayaran kasbon" },
       { status: 500 }
     );
   }

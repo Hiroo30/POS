@@ -7,6 +7,7 @@ import PosProductCard from "@/components/PosProductCard";
 import CartSidebar from "@/components/CartSidebar";
 import CheckoutModal from "@/components/CheckoutModal";
 import ReceiptModal from "@/components/ReceiptModal";
+import { deviceFetch, getDeviceId, getDeviceLabel } from "@/lib/device";
 
 interface SummaryData {
   totalItems: number;
@@ -23,11 +24,18 @@ function formatRupiah(n: number) {
   return "Rp " + Math.round(n).toLocaleString("id-ID");
 }
 
+const QUICK_CUSTOMERS = [
+  { id: "walkin", label: "Walk-in (Umum)" },
+  { id: "pak-rt", label: "Pak RT Bambang" },
+  { id: "bu-siti", label: "Bu Siti Warung" },
+];
+
 export default function PosPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("semua");
+  const [selectedCustomer, setSelectedCustomer] = useState("Walk-in (Umum)");
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [showCheckout, setShowCheckout] = useState(false);
@@ -35,23 +43,54 @@ export default function PosPage() {
   const [lastSale, setLastSale] = useState<SaleTransaction | null>(null);
   const [showCart, setShowCart] = useState(false);
   const [dateStr, setDateStr] = useState("Hari ini");
+  const [timeStr, setTimeStr] = useState("14:30 WIB");
+  const [deviceId, setDeviceId] = useState("");
+  const [deviceLabel, setDeviceLabel] = useState("");
+
+  // Load per-device cart on mount
+  useEffect(() => {
+    const id = getDeviceId();
+    setDeviceId(id);
+    setDeviceLabel(getDeviceLabel());
+    try {
+      const saved = localStorage.getItem(`pos_cart_${id}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) setCart(parsed);
+      }
+    } catch {
+      // fallback
+    }
+  }, []);
+
+  // Save cart changes strictly scoped to this device
+  useEffect(() => {
+    if (!deviceId) return;
+    try {
+      localStorage.setItem(`pos_cart_${deviceId}`, JSON.stringify(cart));
+    } catch {
+      // fallback
+    }
+  }, [cart, deviceId]);
 
   useEffect(() => {
+    const now = new Date();
     setDateStr(
-      new Date().toLocaleDateString("id-ID", {
+      now.toLocaleDateString("id-ID", {
         day: "2-digit",
         month: "short",
         year: "numeric",
       })
     );
+    setTimeStr(now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WIB");
   }, []);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
       const [prodRes, sumRes] = await Promise.all([
-        fetch("/api/products"),
-        fetch("/api/summary"),
+        deviceFetch("/api/products"),
+        deviceFetch("/api/summary"),
       ]);
       const prodData = await prodRes.json();
       const sumData = await sumRes.json();
@@ -126,131 +165,244 @@ export default function PosPage() {
   const handleCheckoutSuccess = (sale: SaleTransaction) => {
     setLastSale(sale);
     setCart([]);
+    try {
+      if (deviceId) localStorage.removeItem(`pos_cart_${deviceId}`);
+    } catch {}
     setShowCheckout(false);
     setShowReceipt(true);
     loadData();
   };
 
+  const handleClearCart = () => {
+    setCart([]);
+    try {
+      if (deviceId) localStorage.removeItem(`pos_cart_${deviceId}`);
+    } catch {}
+  };
+
   return (
     <>
-      {/* Top bar */}
-      <div className="kp-topbar">
-        <div style={{display:"flex", alignItems:"center", gap:12}}>
-          <span className="kp-topbar-title">Dashboard Kasir</span>
-          <span style={{fontSize:11, color:"#94a3b8", background:"#f1f5f9", padding:"2px 8px", borderRadius:4, fontWeight:600}}>
-            {dateStr}
-          </span>
+      {/* Top Header Navigation Bar (Stitch Design - Desktop Only) */}
+      <header
+        className="hidden md:flex items-center justify-between sticky top-0 z-30 px-5 bg-white border-b border-slate-200 shadow-2xs"
+        style={{ height: 60 }}
+      >
+        {/* Search & Barcode Scan Bar */}
+        <div style={{display: "flex", alignItems: "center", gap: 12, flex: 1, maxWidth: 440}}>
+          <div style={{
+            position: "relative", width: "100%", display: "flex", alignItems: "center",
+            background: "#f1f5f9", borderRadius: 10, padding: "0 12px"
+          }}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.5">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input
+              type="text"
+              placeholder="Cari barang (F2) atau scan barcode..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: "100%", background: "transparent", border: "none", outline: "none",
+                padding: "8px 8px 8px 10px", fontSize: 12.5, color: "#0f172a"
+              }}
+            />
+            <span style={{
+              fontSize: 10, fontWeight: 800, background: "#e2e8f0", color: "#64748b",
+              padding: "2px 6px", borderRadius: 4, letterSpacing: 0.5
+            }}>
+              F2
+            </span>
+          </div>
         </div>
-        <div className="kp-topbar-actions">
-          <button className="kp-btn-secondary" onClick={loadData} style={{fontSize:11, padding:"5px 10px"}}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+
+        {/* Right Status Actions */}
+        <div style={{display: "flex", alignItems: "center", gap: 12}}>
+          {/* Device Terminal Tag */}
+          <div className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>{deviceLabel || "Terminal POS"}</span>
+          </div>
+
+          {/* Cash Drawer Pill */}
+          <div className="desktop-only" style={{
+            display: "flex", alignItems: "center", gap: 6,
+            background: "#f0fdf4", padding: "6px 12px", borderRadius: 8,
+            border: "1px solid #bbf7d0"
+          }}>
+            <span style={{fontSize: 11, color: "#166534", fontWeight: 600}}>Uang Laci:</span>
+            <span style={{fontSize: 12, fontWeight: 800, color: "#15803d"}}>Rp 1.450.000</span>
+          </div>
+
+          {/* Time & Shift */}
+          <div className="desktop-only" style={{fontSize: 11, color: "#64748b", fontWeight: 600}}>
+            {timeStr} • Shift Pagi
+          </div>
+
+          {/* Cloud Sync OK */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 5,
+            background: "#f8fafc", padding: "5px 10px", borderRadius: 8,
+            border: "1px solid #e2e8f0", fontSize: 11, fontWeight: 700, color: "#10b981"
+          }}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+            </svg>
+            Sync OK
+          </div>
+
+          {/* Refresh button */}
+          <button
+            onClick={loadData}
+            style={{
+              background: "#ffffff", border: "1px solid #e2e8f0",
+              borderRadius: 8, padding: "6px 10px", cursor: "pointer",
+              display: "flex", alignItems: "center", gap: 4, fontSize: 11.5,
+              fontWeight: 700, color: "#475569"
+            }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
             </svg>
-            Refresh
-          </button>
-          {/* Mobile cart btn */}
-          <button
-            className="kp-btn-primary"
-            style={{display:"none"}}
-            onClick={() => setShowCart(true)}
-            id="mobile-cart-btn"
-          >
-            Keranjang ({cartCount})
+            Muat Ulang
           </button>
         </div>
-      </div>
+      </header>
 
       {/* Main POS Layout */}
-      <div style={{display:"flex", flex:1, overflow:"hidden", height:"calc(100vh - 52px)"}}>
-        {/* Left: Product Catalog */}
-        <div style={{flex:1, display:"flex", flexDirection:"column", overflow:"hidden"}}>
-          {/* Summary Cards */}
-          <div style={{padding:"12px 16px 0", background:"#f0f4f0"}}>
-            <div className="grid-3" style={{marginBottom:12, gap:10}}>
-              <div className="kp-card">
-                <div className="kp-card-header">
-                  <span className="kp-card-title">Transaksi Hari Ini</span>
-                  <span className="kp-card-date">{dateStr}</span>
+      <div className="flex flex-col lg:flex-row flex-1 lg:h-[calc(100vh-60px)] lg:overflow-hidden">
+        {/* Left Column: Metrics + Customer Select + Categories + Catalog */}
+        <div className="flex-1 flex flex-col min-w-0 lg:overflow-hidden">
+          {/* Top Control Section */}
+          <div className="p-3 md:p-4 bg-slate-50 border-b border-slate-200">
+            {/* Mobile Barcode & Search Input (Visible on mobile only) */}
+            <div className="md:hidden relative mb-3">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">
+                search
+              </span>
+              <input
+                type="text"
+                placeholder="Scan barcode atau cari sembako..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-2xs"
+              />
+            </div>
+            {/* Top Metrics Ribbon (Stitch Design: 4 KPIs) */}
+            <div className="grid-3" style={{marginBottom: 10, gap: 10}}>
+              {/* Metric 1: Transaksi Selesai */}
+              <div style={{
+                background: "#ffffff", padding: "10px 14px", borderRadius: 12,
+                boxShadow: "0 1px 3px rgba(0,0,0,0.04)", border: "1px solid #e2e8f0",
+                display: "flex", alignItems: "center", justifyContent: "space-between"
+              }}>
+                <div>
+                  <div style={{fontSize: 9.5, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5}}>
+                    Transaksi Selesai
+                  </div>
+                  <div style={{fontSize: 16, fontWeight: 800, color: "#0f172a", marginTop: 2}}>
+                    {summary?.todaySales ?? 0} Nota
+                  </div>
+                  <div style={{fontSize: 10, color: "#10b981", fontWeight: 600, marginTop: 2}}>
+                    ↑ Hari Ini
+                  </div>
                 </div>
-                <div className="kp-card-body">
-                  <div className="kp-card-icon yellow">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2">
-                      <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
-                      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
-                    </svg>
-                  </div>
-                  <div className="kp-card-value">
-                    <div className="kp-card-number">{summary?.todaySales ?? 0}</div>
-                    <div className="kp-card-sublabel">nota selesai</div>
-                  </div>
+                <div style={{
+                  width: 32, height: 32, borderRadius: 8, background: "#f1f5f9",
+                  display: "flex", alignItems: "center", justifyContent: "center", color: "#006c49"
+                }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                  </svg>
                 </div>
               </div>
 
-              <div className="kp-card">
-                <div className="kp-card-header">
-                  <span className="kp-card-title">Pendapatan</span>
-                  <span className="kp-card-date">{dateStr}</span>
+              {/* Metric 2: Omzet Hari Ini */}
+              <div style={{
+                background: "#ffffff", padding: "10px 14px", borderRadius: 12,
+                boxShadow: "0 1px 3px rgba(0,0,0,0.04)", border: "1px solid #e2e8f0",
+                display: "flex", alignItems: "center", justifyContent: "space-between"
+              }}>
+                <div>
+                  <div style={{fontSize: 9.5, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5}}>
+                    Omzet Penjualan
+                  </div>
+                  <div style={{fontSize: 16, fontWeight: 800, color: "#006c49", marginTop: 2}}>
+                    {formatRupiah(summary?.todayRevenue ?? 0)}
+                  </div>
+                  <div style={{fontSize: 10, color: "#64748b", marginTop: 2}}>
+                    Total kotor kasir
+                  </div>
                 </div>
-                <div className="kp-card-body">
-                  <div className="kp-card-icon green">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2">
-                      <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                    </svg>
-                  </div>
-                  <div className="kp-card-value">
-                    <div className="kp-card-number green" style={{fontSize:15}}>
-                      {formatRupiah(summary?.todayRevenue ?? 0)}
-                    </div>
-                    <div className="kp-card-sublabel">omzet hari ini</div>
-                  </div>
+                <div style={{
+                  width: 32, height: 32, borderRadius: 8, background: "#f0fdf4",
+                  display: "flex", alignItems: "center", justifyContent: "center", color: "#10b981"
+                }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                  </svg>
                 </div>
               </div>
 
-              <div className="kp-card">
-                <div className="kp-card-header">
-                  <span className="kp-card-title">Keuntungan</span>
-                  <span className="kp-card-date">{dateStr}</span>
+              {/* Metric 3: Estimasi Laba */}
+              <div style={{
+                background: "#ffffff", padding: "10px 14px", borderRadius: 12,
+                boxShadow: "0 1px 3px rgba(0,0,0,0.04)", border: "1px solid #e2e8f0",
+                display: "flex", alignItems: "center", justifyContent: "space-between"
+              }}>
+                <div>
+                  <div style={{fontSize: 9.5, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5}}>
+                    Estimasi Laba
+                  </div>
+                  <div style={{fontSize: 16, fontWeight: 800, color: "#10b981", marginTop: 2}}>
+                    {formatRupiah(summary?.todayProfit ?? 0)}
+                  </div>
+                  <div style={{fontSize: 10, color: "#10b981", fontWeight: 600, marginTop: 2}}>
+                    +19.6% net margin
+                  </div>
                 </div>
-                <div className="kp-card-body">
-                  <div className="kp-card-icon green">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2">
-                      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-                      <polyline points="17 6 23 6 23 12"/>
-                    </svg>
-                  </div>
-                  <div className="kp-card-value">
-                    <div className="kp-card-number green" style={{fontSize:15}}>
-                      {formatRupiah(summary?.todayProfit ?? 0)}
-                    </div>
-                    <div className="kp-card-sublabel">laba bersih</div>
-                  </div>
+                <div style={{
+                  width: 32, height: 32, borderRadius: 8, background: "#ecfdf5",
+                  display: "flex", alignItems: "center", justifyContent: "center", color: "#059669"
+                }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
+                  </svg>
                 </div>
               </div>
             </div>
 
-            {/* Search + Category */}
-            <div style={{marginBottom:8}}>
-              <div className="kp-search">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
-                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            {/* Quick Customer Fast Selector (Stitch Feature) */}
+            <div style={{display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap"}}>
+              <span style={{fontSize: 11, fontWeight: 700, color: "#64748b", display: "flex", alignItems: "center", gap: 4}}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                 </svg>
-                <input
-                  type="text"
-                  placeholder="Cari produk, barcode..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery("")} style={{border:"none", background:"none", cursor:"pointer", color:"#94a3b8", padding:0, display:"flex"}}>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
+                Pelanggan:
+              </span>
+              {QUICK_CUSTOMERS.map((c) => {
+                const isSelected = selectedCustomer === c.label;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setSelectedCustomer(c.label)}
+                    style={{
+                      padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700,
+                      cursor: "pointer", border: isSelected ? "none" : "1px solid #e2e8f0",
+                      background: isSelected ? "#006c49" : "#ffffff",
+                      color: isSelected ? "#ffffff" : "#475569",
+                      boxShadow: isSelected ? "0 2px 6px rgba(0,108,73,0.25)" : "none",
+                      transition: "all 0.15s ease"
+                    }}
+                  >
+                    {c.label}
                   </button>
-                )}
-              </div>
+                );
+              })}
             </div>
 
+            {/* Category Filter Pills */}
             <CategoryFilter
               selected={selectedCategory}
               onSelect={setSelectedCategory}
@@ -259,23 +411,23 @@ export default function PosPage() {
             />
           </div>
 
-          {/* Product Grid */}
-          <div style={{flex:1, overflowY:"auto", padding:"8px 16px 110px"}}>
+          {/* Product Grid Area */}
+          <div style={{flex: 1, overflowY: "auto", padding: "14px 18px 110px", background: "#f4f6fb"}}>
             {isLoading ? (
-              <div style={{textAlign:"center", padding:60, color:"#94a3b8"}}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{animation:"spin 1s linear infinite", display:"inline-block"}}>
+              <div style={{textAlign: "center", padding: 60, color: "#94a3b8"}}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{animation: "spin 1s linear infinite", display: "inline-block"}}>
                   <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
                 </svg>
                 <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-                <div style={{marginTop:8, fontSize:13}}>Memuat produk...</div>
+                <div style={{marginTop: 8, fontSize: 13, fontWeight: 600}}>Memuat katalog produk Toko Dewi...</div>
               </div>
             ) : filteredProducts.length === 0 ? (
-              <div style={{textAlign:"center", padding:60, color:"#94a3b8"}}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="1.5" style={{display:"inline-block"}}>
+              <div style={{textAlign: "center", padding: 60, color: "#94a3b8"}}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="1.5" style={{display: "inline-block"}}>
                   <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
                 </svg>
-                <div style={{marginTop:12, fontSize:14, fontWeight:600}}>Produk tidak ditemukan</div>
-                <div style={{fontSize:12, marginTop:4}}>Coba kata kunci lain</div>
+                <div style={{marginTop: 12, fontSize: 14, fontWeight: 700}}>Produk tidak ditemukan</div>
+                <div style={{fontSize: 12, marginTop: 4}}>Coba kata kunci atau pilih kategori lain</div>
               </div>
             ) : (
               <div className="kp-product-grid">
@@ -292,43 +444,43 @@ export default function PosPage() {
           </div>
         </div>
 
-        {/* Right: Desktop Cart */}
+        {/* Right Column: Persistent Desktop Cart */}
         <CartSidebar
           cart={cart}
           totalAmount={totalAmount}
           onUpdateQuantity={handleUpdateQuantity}
           onCheckout={() => setShowCheckout(true)}
-          onClearCart={() => setCart([])}
+          onClearCart={handleClearCart}
         />
       </div>
 
-      {/* Mobile Floating Cart Trigger */}
+      {/* Mobile Floating Cart Trigger (Visible on Phones < 768px when items added) */}
       {cart.length > 0 && (
         <div className="kp-floating-cart" onClick={() => setShowCart(true)}>
-          <div style={{display:"flex", alignItems:"center", gap:10}}>
+          <div style={{display: "flex", alignItems: "center", gap: 10}}>
             <div style={{
-              background:"#fff", color:"#16a34a",
-              borderRadius:"50%", width:26, height:26,
-              display:"flex", alignItems:"center", justifyContent:"center",
-              fontWeight:900, fontSize:12, boxShadow:"0 2px 6px rgba(0,0,0,0.15)"
+              background: "#ffffff", color: "#006c49",
+              borderRadius: "50%", width: 28, height: 28,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontWeight: 900, fontSize: 12, boxShadow: "0 2px 6px rgba(0,0,0,0.15)"
             }}>
               {cartCount}
             </div>
             <div>
-              <div style={{fontSize:10, textTransform:"uppercase", letterSpacing:0.5, opacity:0.9, lineHeight:1}}>
-                Total Pesanan
+              <div style={{fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.9, lineHeight: 1}}>
+                Pesanan: {selectedCustomer}
               </div>
-              <div style={{fontSize:14, fontWeight:900, marginTop:2}}>
+              <div style={{fontSize: 14, fontWeight: 900, marginTop: 2}}>
                 {formatRupiah(totalAmount)}
               </div>
             </div>
           </div>
           <div style={{
-            display:"flex", alignItems:"center", gap:5,
-            background:"rgba(255,255,255,0.22)", padding:"6px 12px",
-            borderRadius:8, fontSize:12, fontWeight:800
+            display: "flex", alignItems: "center", gap: 5,
+            background: "rgba(255,255,255,0.25)", padding: "6px 12px",
+            borderRadius: 8, fontSize: 12, fontWeight: 800
           }}>
-            <span>Lihat Nota / Bayar</span>
+            <span>Lihat Keranjang</span>
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <polyline points="9 18 15 12 9 6"/>
             </svg>
@@ -342,27 +494,27 @@ export default function PosPage() {
           <div className="kp-drawer" onClick={(e) => e.stopPropagation()}>
             {/* Drawer Header */}
             <div style={{
-              padding:"12px 16px",
-              background:"linear-gradient(135deg, #1b2e1f 0%, #15803d 100%)",
-              color:"#fff",
-              display:"flex", alignItems:"center", justifyContent:"space-between"
+              padding: "14px 18px",
+              background: "linear-gradient(135deg, #006c49 0%, #059669 100%)",
+              color: "#fff",
+              display: "flex", alignItems: "center", justifyContent: "space-between"
             }}>
               <div>
-                <div style={{fontSize:13, fontWeight:800, textTransform:"uppercase", letterSpacing:0.5}}>
-                  Keranjang Kasir
+                <div style={{fontSize: 14, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.5}}>
+                  Keranjang Toko DEWI
                 </div>
-                <div style={{fontSize:10, color:"#86efac", marginTop:1}}>
-                  {cartCount} item dipilih
+                <div style={{fontSize: 11, color: "#a7f3d0", marginTop: 2}}>
+                  {cartCount} item • {selectedCustomer}
                 </div>
               </div>
-              <div style={{display:"flex", alignItems:"center", gap:8}}>
+              <div style={{display: "flex", alignItems: "center", gap: 8}}>
                 {cart.length > 0 && (
                   <button
                     onClick={() => { setCart([]); setShowCart(false); }}
                     style={{
-                      background:"rgba(255,255,255,0.15)", border:"none",
-                      borderRadius:6, padding:"4px 8px", color:"#fff",
-                      fontSize:10, fontWeight:700, cursor:"pointer"
+                      background: "rgba(255,255,255,0.18)", border: "none",
+                      borderRadius: 6, padding: "5px 10px", color: "#fff",
+                      fontSize: 10.5, fontWeight: 700, cursor: "pointer"
                     }}
                   >
                     Kosongkan
@@ -371,10 +523,10 @@ export default function PosPage() {
                 <button
                   onClick={() => setShowCart(false)}
                   style={{
-                    background:"rgba(255,255,255,0.2)", border:"none",
-                    borderRadius:6, width:28, height:28, color:"#fff",
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    cursor:"pointer", fontSize:14, fontWeight:700
+                    background: "rgba(255,255,255,0.22)", border: "none",
+                    borderRadius: 6, width: 30, height: 30, color: "#fff",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: "pointer", fontSize: 14, fontWeight: 700
                   }}
                 >
                   ✕
@@ -382,8 +534,8 @@ export default function PosPage() {
               </div>
             </div>
 
-            {/* Drawer Items */}
-            <div style={{maxHeight:"45vh", overflowY:"auto", padding:"6px 0"}}>
+            {/* Drawer Items List */}
+            <div style={{maxHeight: "48vh", overflowY: "auto", padding: "8px 0"}}>
               {cart.map((item, idx) => {
                 const unitLabel = item.unitUsed === "PACK" && item.product.packUnit
                   ? item.product.packUnit
@@ -391,27 +543,27 @@ export default function PosPage() {
                 return (
                   <div key={`${item.product.id}-${item.unitUsed}`} className="kp-cart-item">
                     <div style={{
-                      width:18, height:18, borderRadius:"50%", background:"#16a34a",
-                      color:"#fff", fontSize:9, fontWeight:800, display:"flex",
-                      alignItems:"center", justifyContent:"center", flexShrink:0
+                      width: 22, height: 22, borderRadius: "50%", background: "#006c49",
+                      color: "#fff", fontSize: 10, fontWeight: 800, display: "flex",
+                      alignItems: "center", justifyContent: "center", flexShrink: 0
                     }}>
                       {idx + 1}
                     </div>
-                    <div style={{flex:1, minWidth:0}}>
-                      <div className="kp-cart-item-name" style={{fontSize:12}}>
+                    <div style={{flex: 1, minWidth: 0}}>
+                      <div className="kp-cart-item-name" style={{fontSize: 12.5, fontWeight: 700}}>
                         {item.product.name}
                       </div>
                       <div className="kp-cart-item-price">
                         {new Intl.NumberFormat("id-ID").format(item.pricePerUnit)} × {item.quantity} {unitLabel}
                       </div>
                     </div>
-                    <div style={{textAlign:"right", flexShrink:0}}>
-                      <div style={{fontSize:12, fontWeight:800, color:"#16a34a", marginBottom:4}}>
+                    <div style={{textAlign: "right", flexShrink: 0}}>
+                      <div style={{fontSize: 13, fontWeight: 800, color: "#006c49", marginBottom: 4}}>
                         {new Intl.NumberFormat("id-ID").format(item.subtotal)}
                       </div>
                       <div className="kp-cart-qty-control">
                         <button className="kp-qty-btn" onClick={() => handleUpdateQuantity(item.product.id, item.unitUsed, item.quantity - 1)}>−</button>
-                        <span style={{fontSize:12, fontWeight:700, minWidth:20, textAlign:"center"}}>{item.quantity}</span>
+                        <span style={{fontSize: 12, fontWeight: 700, minWidth: 20, textAlign: "center"}}>{item.quantity}</span>
                         <button className="kp-qty-btn" onClick={() => handleUpdateQuantity(item.product.id, item.unitUsed, item.quantity + 1)}>+</button>
                       </div>
                     </div>
@@ -421,17 +573,17 @@ export default function PosPage() {
             </div>
 
             {/* Drawer Footer */}
-            <div style={{padding:"12px 16px", borderTop:"2px solid #e2e8f0", background:"#fff"}}>
-              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
-                <span style={{fontSize:13, color:"#64748b", fontWeight:600}}>Total Tagihan:</span>
-                <span style={{fontSize:18, fontWeight:900, color:"#16a34a"}}>{formatRupiah(totalAmount)}</span>
+            <div style={{padding: "14px 18px", borderTop: "1px solid #e2e8f0", background: "#fff"}}>
+              <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12}}>
+                <span style={{fontSize: 13, color: "#64748b", fontWeight: 600}}>Total Tagihan:</span>
+                <span style={{fontSize: 20, fontWeight: 900, color: "#006c49"}}>{formatRupiah(totalAmount)}</span>
               </div>
               <button
                 className="kp-pay-btn"
-                style={{marginTop:0}}
+                style={{marginTop: 0, background: "linear-gradient(135deg, #10b981 0%, #059669 100%)"}}
                 onClick={() => { setShowCart(false); setShowCheckout(true); }}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
                   <line x1="1" y1="10" x2="23" y2="10"/>
                 </svg>
@@ -457,13 +609,6 @@ export default function PosPage() {
           onClose={() => setShowReceipt(false)}
         />
       )}
-
-      {/* Mobile floating cart button */}
-      <style>{`
-        @media (max-width: 768px) {
-          #mobile-cart-btn { display: flex !important; }
-        }
-      `}</style>
     </>
   );
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import type { Product, TransactionType } from "@/lib/types";
 import { formatRupiah } from "@/lib/formatters";
+import { deviceFetch } from "@/lib/device";
 
 interface Props {
   product: Product | null;
@@ -67,7 +68,7 @@ export default function QuickStockModal({ product, mode, isOpen, onClose, onSucc
     setIsLoading(true);
     setErrorMessage("");
     try {
-      const res = await fetch("/api/transactions", {
+      const res = await deviceFetch("/api/transactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -23,13 +23,25 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="id" style={{height:"100%"}}>
-      <body style={{margin:0, padding:0, height:"100%", userSelect:"none"}}>
-        <div className="kp-layout">
+    <html lang="id" className="h-full">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap"
+          rel="stylesheet"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="h-full bg-[#f4f6fb] text-[#131b2e] antialiased">
+        <div className="min-h-screen flex flex-col md:flex-row">
           <Navbar />
-          <div className="kp-main">
+          <main className="flex-1 min-w-0 md:pl-64 pt-14 md:pt-0 pb-20 md:pb-6 overflow-x-hidden">
             {children}
-          </div>
+          </main>
         </div>
       </body>
     </html>

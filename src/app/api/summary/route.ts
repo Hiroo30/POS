@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
-import { getStoreSummary } from "@/lib/db";
+import { getStoreSummary, getDeviceIdFromRequest } from "@/lib/db";
 
 export async function GET(request: Request) {
   try {
-    // Read request url to ensure dynamic evaluation
-    const _ = request.url;
-    const summary = await getStoreSummary();
+    const deviceId = getDeviceIdFromRequest(request);
+    const summary = await getStoreSummary(deviceId);
     return NextResponse.json(
       { success: true, data: summary },
       { headers: { "Cache-Control": "no-store, max-age=0" } }

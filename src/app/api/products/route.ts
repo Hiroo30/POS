@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { getProducts, addProduct } from "@/lib/db";
+import { getProducts, addProduct, getDeviceIdFromRequest } from "@/lib/db";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const products = await getProducts();
+    const deviceId = getDeviceIdFromRequest(request);
+    const products = await getProducts(deviceId);
     return NextResponse.json({ success: true, data: products });
   } catch (error) {
     console.error("Error fetching products:", error);
@@ -16,6 +17,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const deviceId = getDeviceIdFromRequest(request);
     const body = await request.json();
     if (!body.name || !body.baseUnit) {
       return NextResponse.json(
@@ -38,7 +40,7 @@ export async function POST(request: Request) {
       sellPrice: Number(body.sellPrice) || 0,
       costPricePack: body.costPricePack ? Number(body.costPricePack) : undefined,
       sellPricePack: body.sellPricePack ? Number(body.sellPricePack) : undefined,
-    });
+    }, deviceId);
 
     return NextResponse.json({ success: true, data: newProduct }, { status: 201 });
   } catch (error) {

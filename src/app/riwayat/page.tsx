@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Navbar from "@/components/Navbar";
 import { Transaction, TransactionType } from "@/lib/types";
 import { formatRupiah, formatDateTime } from "@/lib/formatters";
 import { History, ArrowDownCircle, ArrowUpCircle, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { deviceFetch } from "@/lib/device";
 
 export default function RiwayatPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -14,7 +14,7 @@ export default function RiwayatPage() {
   const loadTransactions = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/transactions?limit=200");
+      const res = await deviceFetch("/api/transactions?limit=200");
       const data = await res.json();
       if (data.success) {
         setTransactions(data.data);
@@ -37,8 +37,6 @@ export default function RiwayatPage() {
 
   return (
     <div className="min-h-screen bg-slate-100/70 text-slate-900 pb-20">
-      <Navbar />
-
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>

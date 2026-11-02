@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
-import { getTransactions, recordStockMutation } from "@/lib/db";
+import { getTransactions, recordStockMutation, getDeviceIdFromRequest } from "@/lib/db";
 
 export async function GET(request: Request) {
   try {
+    const deviceId = getDeviceIdFromRequest(request);
     const { searchParams } = new URL(request.url);
     const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!) : 100;
     const productId = searchParams.get("productId") || undefined;
 
-    const list = await getTransactions(limit, productId);
+    const list = await getTransactions(limit, productId, deviceId);
     return NextResponse.json({ success: true, data: list });
   } catch (error) {
     console.error("Error fetching transactions:", error);
@@ -20,6 +21,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const deviceId = getDeviceIdFromRequest(request);
     const body = await request.json();
     if (!body.productId || !body.type || body.quantityInput === undefined) {
       return NextResponse.json(
@@ -43,7 +45,7 @@ export async function POST(request: Request) {
       quantityInput: qty,
       note: body.note,
       newCostPrice: body.newCostPrice ? Number(body.newCostPrice) : undefined,
-    });
+    }, deviceId);
 
     if (!result) {
       return NextResponse.json(
@@ -60,10 +62,10 @@ export async function POST(request: Request) {
           ? "Stok berhasil ditambahkan"
           : body.type === "OUT"
           ? "Stok berhasil dikurangi"
-          : "Stok berhasil disesuaikan",
+          : "Stok fisik berhasil disesuaikan",
     });
   } catch (error) {
-    console.error("Error creating transaction:", error);
+    console.error("Error creating stock mutation:", error);
     return NextResponse.json(
       { success: false, error: "Gagal memproses transaksi stok" },
       { status: 500 }

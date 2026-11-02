@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { CartItem, SaleTransaction } from "@/lib/types";
+import { deviceFetch } from "@/lib/device";
 
 interface Props {
   cart: CartItem[];
@@ -63,7 +64,7 @@ export default function CheckoutModal({ cart, totalAmount, onClose, onSuccess }:
     setIsLoading(true);
     setErrorMessage("");
     try {
-      const res = await fetch("/api/sales", {
+      const res = await deviceFetch("/api/sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

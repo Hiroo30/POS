@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getProductById, updateProduct, deleteProduct } from "@/lib/db";
+import { getProductById, updateProduct, deleteProduct, getDeviceIdFromRequest } from "@/lib/db";
 
 export async function GET(
   request: Request,
@@ -7,7 +7,8 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const product = await getProductById(id);
+    const deviceId = getDeviceIdFromRequest(request);
+    const product = await getProductById(id, deviceId);
     if (!product) {
       return NextResponse.json(
         { success: false, error: "Barang tidak ditemukan" },
@@ -30,6 +31,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
+    const deviceId = getDeviceIdFromRequest(request);
     const body = await request.json();
 
     const updated = await updateProduct(id, {
@@ -46,7 +48,7 @@ export async function PUT(
       sellPrice: body.sellPrice !== undefined ? Number(body.sellPrice) : undefined,
       costPricePack: body.costPricePack !== undefined ? Number(body.costPricePack) : undefined,
       sellPricePack: body.sellPricePack !== undefined ? Number(body.sellPricePack) : undefined,
-    });
+    }, deviceId);
 
     if (!updated) {
       return NextResponse.json(
@@ -71,8 +73,9 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const success = await deleteProduct(id);
-    if (!success) {
+    const deviceId = getDeviceIdFromRequest(request);
+    const deleted = await deleteProduct(id, deviceId);
+    if (!deleted) {
       return NextResponse.json(
         { success: false, error: "Barang tidak ditemukan" },
         { status: 404 }

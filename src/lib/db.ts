@@ -13,15 +13,8 @@ import {
 } from "./types";
 import { INITIAL_PRODUCTS, INITIAL_KASBON } from "./seedData";
 
-// Keys for Redis (if enabled)
-const PRODUCTS_KEY = "sembako:products";
-const TRANSACTIONS_KEY = "sembako:transactions";
-const SALES_KEY = "sembako:sales";
-const KASBON_KEY = "sembako:kasbon";
-
 // File path for local fallback
 const DATA_DIR = path.join(process.cwd(), "data");
-const DB_FILE = path.join(DATA_DIR, "db.json");
 
 export interface DatabaseSchema {
   products: Product[];
@@ -31,14 +24,36 @@ export interface DatabaseSchema {
   lastBackupDate?: string;
 }
 
-// In-memory fallback
-let memDb: DatabaseSchema = {
-  products: INITIAL_PRODUCTS,
-  transactions: [],
-  sales: [],
-  kasbon: INITIAL_KASBON,
-  lastBackupDate: new Date().toISOString(),
-};
+// In-memory fallback keyed by device ID
+const memDbByDevice: Record<string, DatabaseSchema> = {};
+
+function normalizeDeviceId(deviceId?: string): string {
+  if (!deviceId || typeof deviceId !== "string" || deviceId.trim() === "") {
+    return "default";
+  }
+  // Sanitize alphanumeric + dash + underscore
+  return deviceId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
+}
+
+export function getDeviceIdFromRequest(request: Request): string {
+  try {
+    const url = new URL(request.url);
+    const fromQuery = url.searchParams.get("deviceId");
+    if (fromQuery) return normalizeDeviceId(fromQuery);
+
+    const fromHeader = request.headers.get("x-device-id");
+    if (fromHeader) return normalizeDeviceId(fromHeader);
+
+    const cookieHeader = request.headers.get("cookie") || "";
+    const match = cookieHeader.match(/pos_device_id=([^;]+)/);
+    if (match && match[1]) {
+      return normalizeDeviceId(decodeURIComponent(match[1]));
+    }
+  } catch {
+    // ignore
+  }
+  return "default";
+}
 
 function hasRedisEnv(): boolean {
   return Boolean(
@@ -75,55 +90,82 @@ function getRedis(): Redis | null {
   return _redis;
 }
 
+function createInitialState(): DatabaseSchema {
+  return {
+    products: JSON.parse(JSON.stringify(INITIAL_PRODUCTS)),
+    transactions: [],
+    sales: [],
+    kasbon: JSON.parse(JSON.stringify(INITIAL_KASBON)),
+    lastBackupDate: new Date().toISOString(),
+  };
+}
+
 // ─── Local File Helpers ───────────────────────────────────────────────────────
 
-function readLocalDb(): DatabaseSchema {
+function getDbFilePath(deviceId: string): string {
+  return path.join(DATA_DIR, `db-${deviceId}.json`);
+}
+
+function readLocalDb(deviceId: string): DatabaseSchema {
+  const normId = normalizeDeviceId(deviceId);
   try {
     if (!fs.existsSync(DATA_DIR)) {
       try {
         fs.mkdirSync(DATA_DIR, { recursive: true });
       } catch {
-        return memDb;
+        return memDbByDevice[normId] || (memDbByDevice[normId] = createInitialState());
       }
     }
 
-    if (!fs.existsSync(DB_FILE)) {
-      const initial: DatabaseSchema = {
-        products: INITIAL_PRODUCTS,
-        transactions: [],
-        sales: [],
-        kasbon: INITIAL_KASBON,
-        lastBackupDate: new Date().toISOString(),
-      };
-      try {
-        fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2), "utf-8");
-      } catch {
-        memDb = initial;
+    const filePath = getDbFilePath(normId);
+    if (!fs.existsSync(filePath)) {
+      // Legacy fallback: if deviceId is default and db.json exists, load it
+      const legacyFile = path.join(DATA_DIR, "db.json");
+      if (normId === "default" && fs.existsSync(legacyFile)) {
+        try {
+          const content = fs.readFileSync(legacyFile, "utf-8");
+          const parsed = JSON.parse(content);
+          memDbByDevice[normId] = parsed;
+          return parsed;
+        } catch {
+          // fallback
+        }
       }
+
+      const initial = createInitialState();
+      try {
+        fs.writeFileSync(filePath, JSON.stringify(initial, null, 2), "utf-8");
+      } catch {
+        // In-memory fallback
+      }
+      memDbByDevice[normId] = initial;
       return initial;
     }
 
-    const content = fs.readFileSync(DB_FILE, "utf-8");
+    const content = fs.readFileSync(filePath, "utf-8");
     const parsed = JSON.parse(content);
     if (!parsed.products || parsed.products.length === 0) parsed.products = INITIAL_PRODUCTS;
     if (!parsed.transactions) parsed.transactions = [];
     if (!parsed.sales) parsed.sales = [];
     if (!parsed.kasbon) parsed.kasbon = INITIAL_KASBON;
+    memDbByDevice[normId] = parsed;
     return parsed;
   } catch {
-    return memDb;
+    return memDbByDevice[normId] || (memDbByDevice[normId] = createInitialState());
   }
 }
 
-function writeLocalDb(data: DatabaseSchema): void {
-  memDb = data;
+function writeLocalDb(data: DatabaseSchema, deviceId: string): void {
+  const normId = normalizeDeviceId(deviceId);
+  memDbByDevice[normId] = data;
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
-    const tempFile = `${DB_FILE}.tmp`;
+    const filePath = getDbFilePath(normId);
+    const tempFile = `${filePath}.tmp`;
     fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), "utf-8");
-    fs.renameSync(tempFile, DB_FILE);
+    fs.renameSync(tempFile, filePath);
   } catch {
     // In-memory fallback active
   }
@@ -131,20 +173,16 @@ function writeLocalDb(data: DatabaseSchema): void {
 
 // ─── Vercel Blob Helpers ─────────────────────────────────────────────────────
 
-async function readBlobDb(): Promise<DatabaseSchema | null> {
+async function readBlobDb(deviceId: string): Promise<DatabaseSchema | null> {
   if (!hasBlobEnv()) return null;
+  const normId = normalizeDeviceId(deviceId);
   try {
     const { list } = await import("@vercel/blob");
-    const l = await list({ prefix: "sembako-state-" });
+    const prefix = `sembako-state-${normId}-`;
+    const l = await list({ prefix });
     if (!l.blobs || l.blobs.length === 0) {
-      const initial: DatabaseSchema = {
-        products: INITIAL_PRODUCTS,
-        transactions: [],
-        sales: [],
-        kasbon: INITIAL_KASBON,
-        lastBackupDate: new Date().toISOString(),
-      };
-      await writeBlobDb(initial);
+      const initial = createInitialState();
+      await writeBlobDb(initial, normId);
       return initial;
     }
 
@@ -164,15 +202,16 @@ async function readBlobDb(): Promise<DatabaseSchema | null> {
   }
 }
 
-async function writeBlobDb(data: DatabaseSchema): Promise<void> {
+async function writeBlobDb(data: DatabaseSchema, deviceId: string): Promise<void> {
   if (!hasBlobEnv()) return;
+  const normId = normalizeDeviceId(deviceId);
   try {
     const { put, list, del } = await import("@vercel/blob");
-    const filename = `sembako-state-${Date.now()}.json`;
+    const filename = `sembako-state-${normId}-${Date.now()}.json`;
     await put(filename, JSON.stringify(data), { access: "public" });
 
-    // Prune old versions in background (keep latest 3)
-    list({ prefix: "sembako-state-" })
+    // Prune old versions in background (keep latest 3 per device)
+    list({ prefix: `sembako-state-${normId}-` })
       .then(async (l) => {
         if (l.blobs && l.blobs.length > 3) {
           l.blobs.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
@@ -190,16 +229,23 @@ async function writeBlobDb(data: DatabaseSchema): Promise<void> {
 
 // ─── Unified Data Layer ───────────────────────────────────────────────────────
 
-export async function getDbState(): Promise<DatabaseSchema> {
+export async function getDbState(deviceId?: string): Promise<DatabaseSchema> {
+  const normId = normalizeDeviceId(deviceId);
+
   // 1. Redis
   const redis = getRedis();
   if (redis) {
     try {
+      const pKey = `sembako:products:${normId}`;
+      const tKey = `sembako:transactions:${normId}`;
+      const sKey = `sembako:sales:${normId}`;
+      const kKey = `sembako:kasbon:${normId}`;
+
       const [products, transactions, sales, kasbon] = await Promise.all([
-        redis.get<Product[]>(PRODUCTS_KEY),
-        redis.get<Transaction[]>(TRANSACTIONS_KEY),
-        redis.get<SaleTransaction[]>(SALES_KEY),
-        redis.get<KasbonRecord[]>(KASBON_KEY),
+        redis.get<Product[]>(pKey),
+        redis.get<Transaction[]>(tKey),
+        redis.get<SaleTransaction[]>(sKey),
+        redis.get<KasbonRecord[]>(kKey),
       ]);
       if (products && products.length > 0) {
         return {
@@ -217,26 +263,32 @@ export async function getDbState(): Promise<DatabaseSchema> {
 
   // 2. Vercel Blob
   if (hasBlobEnv()) {
-    const blobData = await readBlobDb();
+    const blobData = await readBlobDb(normId);
     if (blobData) return blobData;
   }
 
   // 3. Local fallback
-  return readLocalDb();
+  return readLocalDb(normId);
 }
 
-export async function saveDbState(data: DatabaseSchema): Promise<void> {
-  memDb = data;
+export async function saveDbState(data: DatabaseSchema, deviceId?: string): Promise<void> {
+  const normId = normalizeDeviceId(deviceId);
+  memDbByDevice[normId] = data;
 
   // 1. Redis
   const redis = getRedis();
   if (redis) {
     try {
+      const pKey = `sembako:products:${normId}`;
+      const tKey = `sembako:transactions:${normId}`;
+      const sKey = `sembako:sales:${normId}`;
+      const kKey = `sembako:kasbon:${normId}`;
+
       await Promise.all([
-        redis.set(PRODUCTS_KEY, data.products),
-        redis.set(TRANSACTIONS_KEY, data.transactions || []),
-        redis.set(SALES_KEY, data.sales || []),
-        redis.set(KASBON_KEY, data.kasbon || []),
+        redis.set(pKey, data.products),
+        redis.set(tKey, data.transactions || []),
+        redis.set(sKey, data.sales || []),
+        redis.set(kKey, data.kasbon || []),
       ]);
     } catch (e) {
       console.warn("Redis saveDbState error:", e);
@@ -246,32 +298,33 @@ export async function saveDbState(data: DatabaseSchema): Promise<void> {
   // 2. Vercel Blob
   if (hasBlobEnv()) {
     try {
-      await writeBlobDb(data);
+      await writeBlobDb(data, normId);
     } catch (e) {
       console.warn("Vercel Blob saveDbState error:", e);
     }
   }
 
   // 3. Local file
-  writeLocalDb(data);
+  writeLocalDb(data, normId);
 }
 
 // ─── Products ────────────────────────────────────────────────────────────────
 
-export async function getProducts(): Promise<Product[]> {
-  const db = await getDbState();
+export async function getProducts(deviceId?: string): Promise<Product[]> {
+  const db = await getDbState(deviceId);
   return (db.products || []).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function getProductById(id: string): Promise<Product | undefined> {
-  const products = await getProducts();
+export async function getProductById(id: string, deviceId?: string): Promise<Product | undefined> {
+  const products = await getProducts(deviceId);
   return products.find((p) => p.id === id);
 }
 
 export async function addProduct(
-  productData: Omit<Product, "id" | "createdAt" | "updatedAt">
+  productData: Omit<Product, "id" | "createdAt" | "updatedAt">,
+  deviceId?: string
 ): Promise<Product> {
-  const db = await getDbState();
+  const db = await getDbState(deviceId);
   const newProduct: Product = {
     ...productData,
     id: `prod-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -280,15 +333,16 @@ export async function addProduct(
   };
 
   db.products.push(newProduct);
-  await saveDbState(db);
+  await saveDbState(db, deviceId);
   return newProduct;
 }
 
 export async function updateProduct(
   id: string,
-  updateData: Partial<Omit<Product, "id" | "createdAt">>
+  updateData: Partial<Omit<Product, "id" | "createdAt">>,
+  deviceId?: string
 ): Promise<Product | null> {
-  const db = await getDbState();
+  const db = await getDbState(deviceId);
   const index = db.products.findIndex((p) => p.id === id);
   if (index === -1) return null;
 
@@ -298,16 +352,16 @@ export async function updateProduct(
     updatedAt: new Date().toISOString(),
   };
 
-  await saveDbState(db);
+  await saveDbState(db, deviceId);
   return db.products[index];
 }
 
-export async function deleteProduct(id: string): Promise<boolean> {
-  const db = await getDbState();
+export async function deleteProduct(id: string, deviceId?: string): Promise<boolean> {
+  const db = await getDbState(deviceId);
   const initialLength = db.products.length;
   db.products = db.products.filter((p) => p.id !== id);
   if (db.products.length !== initialLength) {
-    await saveDbState(db);
+    await saveDbState(db, deviceId);
     return true;
   }
   return false;
@@ -324,11 +378,14 @@ export interface MutateStockInput {
   newCostPrice?: number;
 }
 
-export async function recordStockMutation(input: MutateStockInput): Promise<{
+export async function recordStockMutation(
+  input: MutateStockInput,
+  deviceId?: string
+): Promise<{
   product: Product;
   transaction: Transaction;
 } | null> {
-  const db = await getDbState();
+  const db = await getDbState(deviceId);
   const productIndex = db.products.findIndex((p) => p.id === input.productId);
   if (productIndex === -1) return null;
 
@@ -404,7 +461,7 @@ export async function recordStockMutation(input: MutateStockInput): Promise<{
     db.transactions = db.transactions.slice(0, 1000);
   }
 
-  await saveDbState(db);
+  await saveDbState(db, deviceId);
   return { product, transaction: newTx };
 }
 
@@ -419,11 +476,14 @@ export interface CreateSaleInput {
   dueDate?: string; // Untuk Kasbon
 }
 
-export async function processSale(input: CreateSaleInput): Promise<{
+export async function processSale(
+  input: CreateSaleInput,
+  deviceId?: string
+): Promise<{
   sale: SaleTransaction;
   kasbon?: KasbonRecord;
 }> {
-  const db = await getDbState();
+  const db = await getDbState(deviceId);
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "");
   const randomSuffix = Math.floor(1000 + Math.random() * 9000);
@@ -582,19 +642,19 @@ export async function processSale(input: CreateSaleInput): Promise<{
     db.kasbon.unshift(kasbonRecord);
   }
 
-  await saveDbState(db);
+  await saveDbState(db, deviceId);
   return { sale, kasbon: kasbonRecord };
 }
 
-export async function getSales(limit = 100): Promise<SaleTransaction[]> {
-  const db = await getDbState();
+export async function getSales(limit = 100, deviceId?: string): Promise<SaleTransaction[]> {
+  const db = await getDbState(deviceId);
   return (db.sales || []).slice(0, limit);
 }
 
 // ─── Kasbon (Buku Hutang Pelanggan) ──────────────────────────────────────────
 
-export async function getKasbonList(): Promise<KasbonRecord[]> {
-  const db = await getDbState();
+export async function getKasbonList(deviceId?: string): Promise<KasbonRecord[]> {
+  const db = await getDbState(deviceId);
   return db.kasbon || INITIAL_KASBON;
 }
 
@@ -602,9 +662,10 @@ export async function addKasbonManual(
   data: Omit<
     KasbonRecord,
     "id" | "status" | "createdAt" | "paidAmount" | "remainingAmount"
-  >
+  >,
+  deviceId?: string
 ): Promise<KasbonRecord> {
-  const db = await getDbState();
+  const db = await getDbState(deviceId);
   const newBon: KasbonRecord = {
     ...data,
     id: `bon-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -616,15 +677,16 @@ export async function addKasbonManual(
 
   if (!db.kasbon) db.kasbon = [];
   db.kasbon.unshift(newBon);
-  await saveDbState(db);
+  await saveDbState(db, deviceId);
   return newBon;
 }
 
 export async function payKasbon(
   id: string,
-  amountToPay: number
+  amountToPay: number,
+  deviceId?: string
 ): Promise<KasbonRecord | null> {
-  const db = await getDbState();
+  const db = await getDbState(deviceId);
   if (!db.kasbon) db.kasbon = [...INITIAL_KASBON];
   const index = db.kasbon.findIndex((b) => b.id === id);
   if (index === -1) return null;
@@ -641,7 +703,7 @@ export async function payKasbon(
   }
 
   db.kasbon[index] = bon;
-  await saveDbState(db);
+  await saveDbState(db, deviceId);
   return bon;
 }
 
@@ -649,9 +711,10 @@ export async function payKasbon(
 
 export async function getTransactions(
   limit = 100,
-  productId?: string
+  productId?: string,
+  deviceId?: string
 ): Promise<Transaction[]> {
-  const db = await getDbState();
+  const db = await getDbState(deviceId);
   let list = db.transactions || [];
   if (productId) {
     list = list.filter((t) => t.productId === productId);
@@ -661,11 +724,11 @@ export async function getTransactions(
 
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
-export async function getStoreSummary(): Promise<StoreSummary> {
+export async function getStoreSummary(deviceId?: string): Promise<StoreSummary> {
   const [products, sales, kasbonList] = await Promise.all([
-    getProducts(),
-    getSales(500),
-    getKasbonList(),
+    getProducts(deviceId),
+    getSales(500, deviceId),
+    getKasbonList(deviceId),
   ]);
 
   let lowStockCount = 0;
@@ -723,25 +786,19 @@ export async function getStoreSummary(): Promise<StoreSummary> {
 
 // ─── Maintenance ──────────────────────────────────────────────────────────────
 
-export async function resetDatabaseToDefault(): Promise<void> {
-  const db: DatabaseSchema = {
-    products: INITIAL_PRODUCTS,
-    transactions: [],
-    sales: [],
-    kasbon: INITIAL_KASBON,
-    lastBackupDate: new Date().toISOString(),
-  };
-  await saveDbState(db);
+export async function resetDatabaseToDefault(deviceId?: string): Promise<void> {
+  const db = createInitialState();
+  await saveDbState(db, deviceId);
 }
 
-export async function getRawDatabase(): Promise<{
+export async function getRawDatabase(deviceId?: string): Promise<{
   products: Product[];
   transactions: Transaction[];
   sales: SaleTransaction[];
   kasbon: KasbonRecord[];
   lastBackupDate?: string;
 }> {
-  const db = await getDbState();
+  const db = await getDbState(deviceId);
   return {
     products: db.products || [],
     transactions: db.transactions || [],
@@ -751,12 +808,15 @@ export async function getRawDatabase(): Promise<{
   };
 }
 
-export async function restoreDatabase(data: {
-  products: Product[];
-  transactions: Transaction[];
-  sales?: SaleTransaction[];
-  kasbon?: KasbonRecord[];
-}): Promise<boolean> {
+export async function restoreDatabase(
+  data: {
+    products: Product[];
+    transactions: Transaction[];
+    sales?: SaleTransaction[];
+    kasbon?: KasbonRecord[];
+  },
+  deviceId?: string
+): Promise<boolean> {
   if (!data || !Array.isArray(data.products)) return false;
 
   const db: DatabaseSchema = {
@@ -767,6 +827,6 @@ export async function restoreDatabase(data: {
     lastBackupDate: new Date().toISOString(),
   };
 
-  await saveDbState(db);
+  await saveDbState(db, deviceId);
   return true;
 }

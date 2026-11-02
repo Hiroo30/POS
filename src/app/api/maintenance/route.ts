@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
-import { getRawDatabase, restoreDatabase, resetDatabaseToDefault } from "@/lib/db";
+import {
+  getRawDatabase,
+  restoreDatabase,
+  resetDatabaseToDefault,
+  getDeviceIdFromRequest,
+} from "@/lib/db";
 
 export async function GET(request: Request) {
   try {
+    const deviceId = getDeviceIdFromRequest(request);
     const { searchParams } = new URL(request.url);
     const format = searchParams.get("format");
 
-    const raw = await getRawDatabase();
+    const raw = await getRawDatabase(deviceId);
 
     if (format === "csv") {
       // Export barang ke CSV
@@ -50,7 +56,7 @@ export async function GET(request: Request) {
       return new NextResponse(csvContent, {
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": `attachment; filename="stok-sembako-${new Date().toISOString().slice(0, 10)}.csv"`,
+          "Content-Disposition": `attachment; filename="stok-sembako-${deviceId}-${new Date().toISOString().slice(0, 10)}.csv"`,
         },
       });
     }
@@ -58,47 +64,60 @@ export async function GET(request: Request) {
     // Default: Backup JSON
     return new NextResponse(JSON.stringify(raw, null, 2), {
       headers: {
-        "Content-Type": "application/json",
-        "Content-Disposition": `attachment; filename="backup-sembako-${new Date().toISOString().slice(0, 10)}.json"`,
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Disposition": `attachment; filename="backup-sembako-${deviceId}-${new Date().toISOString().slice(0, 10)}.json"`,
       },
     });
   } catch (error) {
     console.error("Error in maintenance GET:", error);
-    return NextResponse.json({ success: false, error: "Gagal membuat backup" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: "Gagal memproses data backup" },
+      { status: 500 }
+    );
   }
 }
 
 export async function POST(request: Request) {
   try {
+    const deviceId = getDeviceIdFromRequest(request);
     const body = await request.json();
 
     if (body.action === "reset") {
-      await resetDatabaseToDefault();
+      await resetDatabaseToDefault(deviceId);
       return NextResponse.json({
         success: true,
-        message: "Data berhasil direset ke contoh awal sembako",
+        message: `Database perangkat (${deviceId}) berhasil direset ke setelan awal Toko Dewi`,
       });
     }
 
-    if (body.action === "restore" && body.data) {
-      const ok = await restoreDatabase(body.data);
-      if (!ok) {
+    if (body.action === "restore") {
+      if (!body.data) {
         return NextResponse.json(
-          { success: false, error: "Format data backup tidak valid" },
+          { success: false, error: "Data backup tidak ditemukan" },
+          { status: 400 }
+        );
+      }
+      const success = await restoreDatabase(body.data, deviceId);
+      if (!success) {
+        return NextResponse.json(
+          { success: false, error: "Format file cadangan tidak sesuai standar" },
           { status: 400 }
         );
       }
       return NextResponse.json({
         success: true,
-        message: "Data berhasil dipulihkan dari backup",
+        message: `Data perangkat (${deviceId}) berhasil dipulihkan dari file backup!`,
       });
     }
 
-    return NextResponse.json({ success: false, error: "Aksi tidak dikenali" }, { status: 400 });
+    return NextResponse.json(
+      { success: false, error: "Aksi tidak dikenali" },
+      { status: 400 }
+    );
   } catch (error) {
     console.error("Error in maintenance POST:", error);
     return NextResponse.json(
-      { success: false, error: "Gagal memproses permintaan maintenance" },
+      { success: false, error: "Terjadi kesalahan saat memproses data" },
       { status: 500 }
     );
   }

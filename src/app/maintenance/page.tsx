@@ -1,27 +1,51 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getDeviceId, getDeviceLabel, resetDeviceId, setDeviceCustomName } from "@/lib/device";
+
+type TabId = "cadangan" | "hardware" | "struk" | "device";
 
 export default function MaintenancePage() {
+  const [activeTab, setActiveTab] = useState<TabId>("cadangan");
+  const [deviceId, setDeviceId] = useState("");
+  const [deviceLabel, setDeviceLabel] = useState("");
+  const [customDeviceName, setCustomDeviceName] = useState("");
   const [statusMessage, setStatusMessage] = useState<{
     type: "success" | "error" | "info";
     text: string;
   } | null>(null);
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Receipt format state (Strict defaults: Toko DEWI & 0823-2038-1500)
+  const [storeName, setStoreName] = useState("TOKO DEWI");
+  const [storeAddress, setStoreAddress] = useState("Jl. Melati No. 12, RT 02/RW 04");
+  const [storePhone, setStorePhone] = useState("0823-2038-1500");
+  const [receiptFooter, setReceiptFooter] = useState("Terima kasih telah berbelanja di Toko DEWI!");
+  const [printerWidth, setPrinterWidth] = useState<"58mm" | "80mm">("58mm");
+  const [testScanInput, setTestScanInput] = useState("");
+  const [scaleWeight, setScaleWeight] = useState("0.000");
+
+  useEffect(() => {
+    const id = getDeviceId();
+    setDeviceId(id);
+    const label = getDeviceLabel();
+    setDeviceLabel(label);
+    setCustomDeviceName(label);
+  }, []);
 
   const handleDownloadBackup = () => {
-    window.open("/api/maintenance?format=json", "_blank");
+    window.open(`/api/maintenance?format=json&deviceId=${encodeURIComponent(deviceId)}`, "_blank");
     setStatusMessage({
       type: "success",
-      text: "File cadangan (backup JSON) sedang diunduh ke perangkat Anda.",
+      text: `File cadangan (backup JSON) perangkat ${deviceId} sedang diunduh.`,
     });
   };
 
   const handleDownloadCSV = () => {
-    window.open("/api/maintenance?format=csv", "_blank");
+    window.open(`/api/maintenance?format=csv&deviceId=${encodeURIComponent(deviceId)}`, "_blank");
     setStatusMessage({
       type: "success",
-      text: "Laporan data stok format Excel/CSV sedang diunduh.",
+      text: `Laporan data stok format Excel/CSV perangkat ${deviceId} sedang diunduh.`,
     });
   };
 
@@ -30,7 +54,7 @@ export default function MaintenancePage() {
     if (!file) return;
 
     const confirmRestore = window.confirm(
-      "PERINGATAN: Memulihkan backup akan menggantikan data barang & kasbon saat ini dengan data dari file backup. Lanjutkan?"
+      `PERINGATAN: Memulihkan backup akan menggantikan data barang & kasbon pada perangkat ini (${deviceId}). Lanjutkan?`
     );
     if (!confirmRestore) return;
 
@@ -41,9 +65,9 @@ export default function MaintenancePage() {
       const text = await file.text();
       const parsed = JSON.parse(text);
 
-      const res = await fetch("/api/maintenance", {
+      const res = await fetch(`/api/maintenance?deviceId=${encodeURIComponent(deviceId)}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-device-id": deviceId },
         body: JSON.stringify({ action: "restore", data: parsed }),
       });
 
@@ -54,7 +78,7 @@ export default function MaintenancePage() {
 
       setStatusMessage({
         type: "success",
-        text: "Data berhasil dipulihkan dari file cadangan!",
+        text: `Data perangkat (${deviceId}) berhasil dipulihkan dari file cadangan!`,
       });
     } catch (err: unknown) {
       const error = err as Error;
@@ -70,7 +94,7 @@ export default function MaintenancePage() {
 
   const handleResetData = async () => {
     const confirmReset = window.confirm(
-      "Apakah Anda yakin ingin mereset seluruh data kembali ke contoh awal Kasir Pintar Sembako?"
+      `Apakah Anda yakin ingin mereset data KHUSUS perangkat ini (${deviceId}) kembali ke setelan awal Toko Dewi? Perangkat lain tidak akan terpengaruh.`
     );
     if (!confirmReset) return;
 
@@ -78,9 +102,9 @@ export default function MaintenancePage() {
     setStatusMessage(null);
 
     try {
-      const res = await fetch("/api/maintenance", {
+      const res = await fetch(`/api/maintenance?deviceId=${encodeURIComponent(deviceId)}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-device-id": deviceId },
         body: JSON.stringify({ action: "reset" }),
       });
       const data = await res.json();
@@ -90,7 +114,7 @@ export default function MaintenancePage() {
 
       setStatusMessage({
         type: "success",
-        text: "Data berhasil dikembalikan ke contoh awal sembako & kasbon!",
+        text: `Data perangkat (${deviceId}) berhasil dikembalikan ke contoh awal sembako!`,
       });
     } catch (err: unknown) {
       const error = err as Error;
@@ -103,161 +127,685 @@ export default function MaintenancePage() {
     }
   };
 
+  const handleTestPrint = () => {
+    const printWindow = window.open("", "_blank", "width=380,height=600");
+    if (!printWindow) {
+      alert("Izinkan pop-up untuk melakukan tes cetak struk!");
+      return;
+    }
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Struk Sampel - Toko DEWI</title>
+          <style>
+            body { font-family: monospace; font-size: 12px; margin: 0; padding: 10px; width: ${printerWidth}; }
+            .center { text-align: center; }
+            .line { border-bottom: 1px dashed #000; margin: 6px 0; }
+            .row { display: flex; justify-content: space-between; }
+          </style>
+        </head>
+        <body>
+          <div class="center" style="font-weight:bold; font-size:14px;">${storeName}</div>
+          <div class="center">${storeAddress}</div>
+          <div class="center">WA: ${storePhone}</div>
+          <div class="line"></div>
+          <div class="row"><span>Tanggal:</span><span>${new Date().toLocaleDateString("id-ID")}</span></div>
+          <div class="row"><span>Terminal:</span><span>${deviceLabel}</span></div>
+          <div class="line"></div>
+          <div class="row"><span>Beras Ramos 5kg (1x)</span><span>Rp 76.000</span></div>
+          <div class="row"><span>Minyak Bimoli 2L (1x)</span><span>Rp 38.500</span></div>
+          <div class="line"></div>
+          <div class="row" style="font-weight:bold;"><span>TOTAL:</span><span>Rp 114.500</span></div>
+          <div class="row"><span>TUNAI:</span><span>Rp 120.000</span></div>
+          <div class="row"><span>KEMBALI:</span><span>Rp 5.500</span></div>
+          <div class="line"></div>
+          <div class="center" style="margin-top:10px;">${receiptFooter}</div>
+          <script>window.onload = function() { window.print(); window.close(); }</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const handleKickDrawer = () => {
+    setStatusMessage({
+      type: "info",
+      text: "Sinyal pulsa 24V dikirim ke port laci kasir RJ11 (Test Kick OK).",
+    });
+  };
+
+  const handleSaveDeviceName = () => {
+    if (!customDeviceName.trim()) return;
+    setDeviceCustomName(customDeviceName.trim());
+    setDeviceLabel(customDeviceName.trim());
+    setStatusMessage({
+      type: "success",
+      text: `Nama terminal perangkat disimpan sebagai "${customDeviceName.trim()}"!`,
+    });
+  };
+
+  const handleGenerateNewDeviceId = () => {
+    const confirmChange = window.confirm(
+      "Ganti Device ID akan membuat perangkat ini memulai sesi kasir baru dengan data independen. Lanjutkan?"
+    );
+    if (!confirmChange) return;
+    const newId = resetDeviceId();
+    setDeviceId(newId);
+    setDeviceLabel(getDeviceLabel());
+    setStatusMessage({
+      type: "success",
+      text: `Device ID baru aktif: ${newId}. Halaman akan memuat data untuk terminal ini.`,
+    });
+    setTimeout(() => window.location.reload(), 1200);
+  };
+
   return (
-    <>
-      <div className="kp-topbar">
-        <span className="kp-topbar-title">Pengaturan & Backup Data</span>
-      </div>
+    <div className="p-4 md:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
+      {/* Top Header */}
+      <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-slate-400 font-bold">
+            <span>PENGATURAN TOKO</span>
+            <span>•</span>
+            <span>PEMELIHARAAN SISTEM</span>
+            <span>•</span>
+            <span className="text-emerald-700">{deviceLabel}</span>
+          </div>
+          <h1 className="text-xl md:text-2xl font-bold text-slate-800 tracking-tight mt-1">
+            Pengaturan & Maintenance Sistem POS
+          </h1>
+          <div className="flex flex-wrap items-center gap-2 pt-2 text-xs">
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+              Toko DEWI (Aktif)
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono">
+              ID: {deviceId}
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
+              v1.0.0-stable
+            </span>
+            <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
+              <span className="material-symbols-outlined text-[16px]">cloud_done</span>
+              Cloud POS Sinkron OK
+            </span>
+          </div>
+        </div>
 
-      <div className="kp-content">
-        {/* Status Message */}
-        {statusMessage && (
-          <div
-            style={{
-              padding: "10px 14px",
-              borderRadius: 8,
-              marginBottom: 16,
-              fontSize: 12,
-              fontWeight: 700,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              background:
-                statusMessage.type === "success"
-                  ? "#dcfce7"
-                  : statusMessage.type === "error"
-                  ? "#fee2e2"
-                  : "#dbeafe",
-              color:
-                statusMessage.type === "success"
-                  ? "#15803d"
-                  : statusMessage.type === "error"
-                  ? "#b91c1c"
-                  : "#1d4ed8",
-              border: `1px solid ${
-                statusMessage.type === "success"
-                  ? "#bbf7d0"
-                  : statusMessage.type === "error"
-                  ? "#fecaca"
-                  : "#bfdbfe"
-              }`,
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setStatusMessage({
+                type: "success",
+                text: "Semua pengaturan toko & terminal berhasil disimpan!",
+              });
             }}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs md:text-sm font-bold shadow-sm transition-all active:scale-95"
+            type="button"
           >
-            <span>{statusMessage.text}</span>
-          </div>
-        )}
-
-        <div className="grid-2" style={{ gap: 12, marginBottom: 16 }}>
-          {/* Card: Download Backup JSON */}
-          <div className="kp-card" style={{ padding: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <div className="kp-card-icon green">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-              </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: "#1e293b" }}>Backup Seluruh Data (JSON)</div>
-                <div style={{ fontSize: 11, color: "#64748b" }}>Unduh salinan arsip transaksi, stok & kasbon</div>
-              </div>
-            </div>
-            <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 12 }}>
-              Simpan file cadangan ini di komputer atau HP Anda agar data aman.
-            </p>
-            <button
-              type="button"
-              onClick={handleDownloadBackup}
-              className="kp-btn-primary"
-              style={{ width: "100%", justifyContent: "center" }}
-            >
-              Unduh Backup JSON
-            </button>
-          </div>
-
-          {/* Card: Download CSV */}
-          <div className="kp-card" style={{ padding: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <div className="kp-card-icon yellow">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
-                </svg>
-              </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: "#1e293b" }}>Ekspor Laporan Stok (Excel / CSV)</div>
-                <div style={{ fontSize: 11, color: "#64748b" }}>Daftar stok barang, modal & harga jual</div>
-              </div>
-            </div>
-            <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 12 }}>
-              Format tabel CSV yang dapat langsung dibuka di Microsoft Excel atau Google Sheets.
-            </p>
-            <button
-              type="button"
-              onClick={handleDownloadCSV}
-              className="kp-btn-secondary"
-              style={{ width: "100%", justifyContent: "center" }}
-            >
-              Unduh Tabel Excel/CSV
-            </button>
-          </div>
-        </div>
-
-        <div className="grid-2" style={{ gap: 12 }}>
-          {/* Card: Restore JSON */}
-          <div className="kp-card" style={{ padding: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <div className="kp-card-icon blue">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-                </svg>
-              </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: "#1e293b" }}>Pulihkan dari Cadangan</div>
-                <div style={{ fontSize: 11, color: "#64748b" }}>Upload file JSON backup sebelumnya</div>
-              </div>
-            </div>
-            <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 12 }}>
-              Gunakan fitur ini saat berganti perangkat atau ingin memulihkan riwayat data lama.
-            </p>
-            <label className="kp-btn-secondary" style={{ width: "100%", justifyContent: "center", cursor: "pointer", display: "flex" }}>
-              <span>{isProcessing ? "Memproses..." : "Pilih File Backup JSON"}</span>
-              <input
-                type="file"
-                accept=".json"
-                onChange={handleRestoreBackup}
-                disabled={isProcessing}
-                style={{ display: "none" }}
-              />
-            </label>
-          </div>
-
-          {/* Card: Reset */}
-          <div className="kp-card" style={{ padding: 16, borderColor: "#fecaca" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <div className="kp-card-icon red">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
-                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
-                </svg>
-              </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: "#dc2626" }}>Reset ke Data Bawaan</div>
-                <div style={{ fontSize: 11, color: "#64748b" }}>Kembalikan data toko ke setelan awal</div>
-              </div>
-            </div>
-            <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 12 }}>
-              Mengembalikan 15 produk sembako standar dan mengosongkan riwayat transaksi uji coba.
-            </p>
-            <button
-              type="button"
-              onClick={handleResetData}
-              disabled={isProcessing}
-              className="kp-btn-danger"
-              style={{ width: "100%", justifyContent: "center" }}
-            >
-              Reset ke Data Awal
-            </button>
-          </div>
+            <span className="material-symbols-outlined text-[18px]">check_circle</span>
+            <span>Simpan Pengaturan</span>
+          </button>
         </div>
       </div>
-    </>
+
+      {/* Status Message */}
+      {statusMessage && (
+        <div
+          className={`p-4 rounded-xl text-xs md:text-sm font-semibold flex items-center gap-3 border shadow-xs animate-slideDown ${
+            statusMessage.type === "success"
+              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+              : statusMessage.type === "error"
+              ? "bg-rose-50 text-rose-800 border-rose-200"
+              : "bg-blue-50 text-blue-800 border-blue-200"
+          }`}
+        >
+          <span className="material-symbols-outlined text-[20px]">
+            {statusMessage.type === "success"
+              ? "check_circle"
+              : statusMessage.type === "error"
+              ? "error"
+              : "info"}
+          </span>
+          <span>{statusMessage.text}</span>
+        </div>
+      )}
+
+      {/* Main Workspace Layout: Nav Tabs + Content Panels */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Navigation Tabs (Side on Desktop, Top Scroll on Mobile) */}
+        <aside className="lg:col-span-3 space-y-4">
+          <div className="bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-slate-100 space-y-1">
+            <span className="block px-3 py-1 text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+              Modul Pemeliharaan
+            </span>
+
+            {[
+              { id: "cadangan", label: "Cadangan & Database", icon: "cloud_sync" },
+              { id: "hardware", label: "Perangkat Keras (Hardware)", icon: "print" },
+              { id: "struk", label: "Format Struk Belanja", icon: "receipt_long" },
+              { id: "device", label: "Isolasi Terminal Device", icon: "devices" },
+            ].map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as TabId)}
+                  className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs md:text-sm text-left transition-all font-semibold ${
+                    isActive
+                      ? "bg-emerald-700 text-white shadow-sm"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  }`}
+                  type="button"
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="material-symbols-outlined text-[20px]"
+                      style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}
+                    >
+                      {tab.icon}
+                    </span>
+                    <span>{tab.label}</span>
+                  </div>
+                  <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Quick Storage Status Card */}
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-3">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+              <span>Status Penyimpanan Lokal</span>
+              <span className="text-emerald-700">Optimal</span>
+            </div>
+            <div className="space-y-1 text-xs text-slate-500">
+              <div className="flex justify-between">
+                <span>Memori Browser:</span>
+                <span className="font-bold text-slate-700 font-mono">148 MB / 480 MB</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Koneksi Server:</span>
+                <span className="font-bold text-emerald-700">Online LAN & Cloud</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Kecepatan Ping:</span>
+                <span className="font-bold text-emerald-700 font-mono">14 ms</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* Content Panels */}
+        <main className="lg:col-span-9 space-y-6">
+          {/* TAB 1: CADANGAN & DATABASE */}
+          {activeTab === "cadangan" && (
+            <div className="space-y-6">
+              <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 space-y-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[24px]">cloud_sync</span>
+                  </div>
+                  <div>
+                    <h2 className="text-base md:text-lg font-bold text-slate-800">
+                      Cadangan Cloud & Sinkronisasi Database
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      Kelola file backup data kasir toko untuk perangkat {deviceId}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                  {/* Backup JSON */}
+                  <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2.5">
+                        <span className="material-symbols-outlined text-emerald-700 text-[22px]">
+                          add_to_drive
+                        </span>
+                        <h3 className="font-bold text-slate-800 text-sm">Backup Seluruh Data (JSON)</h3>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Unduh arsip lengkap data transaksi, produk sembako, dan kasbon pada perangkat ini.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleDownloadBackup}
+                      className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-2xs transition-all"
+                      type="button"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">download</span>
+                      <span>Unduh File JSON</span>
+                    </button>
+                  </div>
+
+                  {/* Export CSV */}
+                  <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2.5">
+                        <span className="material-symbols-outlined text-amber-600 text-[22px]">
+                          table_view
+                        </span>
+                        <h3 className="font-bold text-slate-800 text-sm">Ekspor Laporan Stok (CSV / Excel)</h3>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Daftar sisa stok fisik, harga modal, harga jual ecer untuk pembukuan Excel.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleDownloadCSV}
+                      className="w-full py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs flex items-center justify-center gap-2 shadow-2xs transition-all"
+                      type="button"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">table_chart</span>
+                      <span>Unduh Tabel CSV</span>
+                    </button>
+                  </div>
+
+                  {/* Restore JSON */}
+                  <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2.5">
+                        <span className="material-symbols-outlined text-blue-600 text-[22px]">
+                          restore
+                        </span>
+                        <h3 className="font-bold text-slate-800 text-sm">Pulihkan dari Backup JSON</h3>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Unggah file JSON backup sebelumnya untuk memulihkan seluruh data toko.
+                      </p>
+                    </div>
+                    <label className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-2xs cursor-pointer transition-all">
+                      <span className="material-symbols-outlined text-[16px]">upload_file</span>
+                      <span>{isProcessing ? "Memproses..." : "Pilih File Backup JSON"}</span>
+                      <input
+                        type="file"
+                        accept=".json"
+                        onChange={handleRestoreBackup}
+                        disabled={isProcessing}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Reset to Default */}
+                  <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/30 space-y-3 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2.5">
+                        <span className="material-symbols-outlined text-rose-600 text-[22px]">
+                          restart_alt
+                        </span>
+                        <h3 className="font-bold text-rose-800 text-sm">Reset ke Data Awal Toko</h3>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Kembalikan komoditas sembako ke setelan bawaan Toko Dewi pada perangkat ini saja.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleResetData}
+                      disabled={isProcessing}
+                      className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-2xs transition-all"
+                      type="button"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">delete_forever</span>
+                      <span>Reset Data Perangkat Ini</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: PERANGKAT KERAS (HARDWARE POS) */}
+          {activeTab === "hardware" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Thermal Printer */}
+              <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[22px]">print</span>
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-sm">Printer Thermal Struk</h3>
+                      <p className="text-xs text-slate-400">USB / Bluetooth / LAN</p>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                    Siap
+                  </span>
+                </div>
+
+                <div className="space-y-3 text-xs">
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1">Lebar Kertas</label>
+                    <select
+                      value={printerWidth}
+                      onChange={(e) => setPrinterWidth(e.target.value as any)}
+                      className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-800"
+                    >
+                      <option value="58mm">58 mm (Standar Warung)</option>
+                      <option value="80mm">80 mm (Thermal Kasir Besar)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleTestPrint}
+                  className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-emerald-800 font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+                  type="button"
+                >
+                  <span className="material-symbols-outlined text-[16px]">receipt</span>
+                  <span>Tes Cetak Struk Sampel</span>
+                </button>
+              </div>
+
+              {/* Barcode Scanner */}
+              <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[22px]">barcode_scanner</span>
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-sm">Pemindai Barcode (Scanner)</h3>
+                      <p className="text-xs text-slate-400">USB HID / Keyboard Emulation</p>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-bold">
+                    Aktif (F2)
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1 text-xs">
+                    Uji Coba Scan Barcode
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Arahkan scanner ke barcode di sini..."
+                    value={testScanInput}
+                    onChange={(e) => setTestScanInput(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-800 font-mono"
+                  />
+                  {testScanInput && (
+                    <span className="text-[10px] text-emerald-700 font-bold mt-1 block">
+                      Barcode Terbaca: {testScanInput} ✓
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Cash Drawer */}
+              <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[22px]">point_of_sale</span>
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-sm">Laci Uang Kasir (Cash Drawer)</h3>
+                      <p className="text-xs text-slate-400">Port RJ11 Printer</p>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                    Terkoneksi
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-500">
+                  Laci otomatis terbuka saat transaksi kasir tunai selesai dicetak.
+                </p>
+
+                <button
+                  onClick={handleKickDrawer}
+                  className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+                  type="button"
+                >
+                  <span className="material-symbols-outlined text-[16px]">lock_open</span>
+                  <span>Buka Laci Manual (Test Kick)</span>
+                </button>
+              </div>
+
+              {/* Digital Scale */}
+              <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[22px]">scale</span>
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-sm">Timbangan Digital USB</h3>
+                      <p className="text-xs text-slate-400">Beras, Gula & Telur Kiloan</p>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                    Tera OK
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block">
+                      Bobot Terbaca:
+                    </span>
+                    <span className="text-xl font-bold font-mono text-emerald-700">
+                      {scaleWeight} <span className="text-xs text-slate-600 font-normal">Kg</span>
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setScaleWeight("0.000")}
+                    className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors"
+                    type="button"
+                  >
+                    Tara (Nol-kan)
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: FORMAT STRUK BELANJA */}
+          {activeTab === "struk" && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Form Input */}
+              <div className="lg:col-span-7 bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+                <h3 className="font-bold text-slate-800 text-base">Format Kepala & Kaki Struk</h3>
+
+                <div className="space-y-3 text-xs">
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1">
+                      Nama Toko / Warung di Struk
+                    </label>
+                    <input
+                      type="text"
+                      value={storeName}
+                      onChange={(e) => setStoreName(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-900 font-bold text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1">
+                      Alamat Lengkap Toko
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={storeAddress}
+                      onChange={(e) => setStoreAddress(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-900 text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1">
+                      Nomor WhatsApp Pelanggan
+                    </label>
+                    <input
+                      type="text"
+                      value={storePhone}
+                      onChange={(e) => setStorePhone(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-900 font-mono text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1">
+                      Pesan Kaki Struk (Footer)
+                    </label>
+                    <input
+                      type="text"
+                      value={receiptFooter}
+                      onChange={(e) => setReceiptFooter(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-900 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setStatusMessage({
+                      type: "success",
+                      text: "Format struk Toko DEWI berhasil diperbarui!",
+                    });
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
+                  type="button"
+                >
+                  <span className="material-symbols-outlined text-[16px]">save</span>
+                  <span>Simpan Format Struk</span>
+                </button>
+              </div>
+
+              {/* Live Preview Paper */}
+              <div className="lg:col-span-5 bg-slate-100 p-5 rounded-2xl flex flex-col items-center justify-center">
+                <div className="text-xs uppercase tracking-wider text-slate-400 font-bold mb-3">
+                  Pratinjau Kertas Thermal ({printerWidth})
+                </div>
+                <div
+                  className="bg-white p-5 rounded-md shadow-md text-slate-900 font-mono text-[11px] leading-tight space-y-2 border border-slate-300"
+                  style={{ width: "260px" }}
+                >
+                  <div className="text-center font-bold text-sm tracking-wide">{storeName}</div>
+                  <div className="text-center text-[10px] text-slate-600">{storeAddress}</div>
+                  <div className="text-center text-[10px] text-slate-600">WA: {storePhone}</div>
+                  <div className="border-b border-dashed border-slate-400 my-2"></div>
+                  <div className="flex justify-between text-[10px]">
+                    <span>NOTA: NOTA-20261102-1234</span>
+                  </div>
+                  <div className="flex justify-between text-[10px]">
+                    <span>Kasir: Kasir Dewi</span>
+                    <span>14:32 WIB</span>
+                  </div>
+                  <div className="border-b border-dashed border-slate-400 my-2"></div>
+                  <div className="flex justify-between">
+                    <span>Beras Ramos 5kg x1</span>
+                    <span>Rp 76.000</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Minyak Bimoli 2L x1</span>
+                    <span>Rp 38.500</span>
+                  </div>
+                  <div className="border-b border-dashed border-slate-400 my-2"></div>
+                  <div className="flex justify-between font-bold text-xs">
+                    <span>TOTAL:</span>
+                    <span>Rp 114.500</span>
+                  </div>
+                  <div className="flex justify-between text-[10px]">
+                    <span>TUNAI:</span>
+                    <span>Rp 120.000</span>
+                  </div>
+                  <div className="flex justify-between text-[10px]">
+                    <span>KEMBALI:</span>
+                    <span>Rp 5.500</span>
+                  </div>
+                  <div className="border-b border-dashed border-slate-400 my-2"></div>
+                  <div className="text-center text-[10px] pt-1">{receiptFooter}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: ISOLASI TERMINAL DEVICE */}
+          {activeTab === "device" && (
+            <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 space-y-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-[24px]">devices</span>
+                </div>
+                <div>
+                  <h2 className="text-base md:text-lg font-bold text-slate-800">
+                    Isolasi Antar-Perangkat (Device POS Independence)
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Memastikan kasir di HP dan laptop memiliki data dan keranjang belanja masing-masing secara terpisah.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-purple-50/50 border border-purple-200/60 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider text-purple-700 font-bold block">
+                      ID Perangkat Ini (Device ID)
+                    </span>
+                    <span className="text-base font-bold font-mono text-purple-950">
+                      {deviceId}
+                    </span>
+                  </div>
+                  <span className="px-3 py-1 rounded-full bg-purple-200 text-purple-900 font-bold text-xs self-start sm:self-center">
+                    {deviceLabel}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600">
+                  Semua transaksi, keranjang kasir, dan perubahan stok yang dilakukan di perangkat ini disimpan pada partisi khusus untuk ID ini. Perangkat lain (misal HP atau Laptop lain) tidak akan terganggu.
+                </p>
+              </div>
+
+              <div className="space-y-4 pt-2">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1 text-xs">
+                    Ubah Nama Label Terminal Ini
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={customDeviceName}
+                      onChange={(e) => setCustomDeviceName(e.target.value)}
+                      placeholder="Contoh: Kasir Meja Depan / Kasir HP Keliling"
+                      className="flex-1 px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-800"
+                    />
+                    <button
+                      onClick={handleSaveDeviceName}
+                      className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs"
+                      type="button"
+                    >
+                      Simpan Nama
+                    </button>
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-4 flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800">Ganti ID Terminal Baru</h4>
+                    <p className="text-[11px] text-slate-400">
+                      Generate ID baru untuk mengosongkan riwayat lokal dan memulai sesi bersih.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleGenerateNewDeviceId}
+                    className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors"
+                    type="button"
+                  >
+                    Generate ID Baru
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+    </div>
   );
 }

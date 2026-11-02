@@ -39,6 +39,7 @@ export interface Product {
   sellPrice: number; // Harga jual per satuan dasar
   costPricePack?: number; // Harga modal per satuan dus/karton
   sellPricePack?: number; // Harga jual per satuan dus/karton
+  imageUrl?: string;
   createdAt: string;
   updatedAt: string;
 }

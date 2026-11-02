@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Product } from "@/lib/types";
 import { CATEGORIES } from "@/lib/categories";
+import { deviceFetch } from "@/lib/device";
 // Icons removed - using inline SVG
 
 interface ProductFormModalProps {
@@ -125,7 +126,7 @@ export default function ProductFormModal({
       const url = isEditing ? `/api/products/${productToEdit!.id}` : "/api/products";
       const method = isEditing ? "PUT" : "POST";
 
-      const res = await fetch(url, {
+      const res = await deviceFetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -155,7 +156,7 @@ export default function ProductFormModal({
 
     setIsDeleting(true);
     try {
-      const res = await fetch(`/api/products/${productToEdit.id}`, {
+      const res = await deviceFetch(`/api/products/${productToEdit.id}`, {
         method: "DELETE",
       });
       const data = await res.json();

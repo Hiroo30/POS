@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { getSales, processSale } from "@/lib/db";
+import { getSales, processSale, getDeviceIdFromRequest } from "@/lib/db";
 
 export async function GET(request: Request) {
   try {
+    const deviceId = getDeviceIdFromRequest(request);
     const { searchParams } = new URL(request.url);
     const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!) : 100;
-    const sales = await getSales(limit);
+    const sales = await getSales(limit, deviceId);
     return NextResponse.json({ success: true, data: sales });
   } catch (error) {
     console.error("Error fetching sales:", error);
@@ -18,6 +19,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const deviceId = getDeviceIdFromRequest(request);
     const body = await request.json();
     if (!body.items || !Array.isArray(body.items) || body.items.length === 0) {
       return NextResponse.json(
@@ -33,7 +35,7 @@ export async function POST(request: Request) {
       customerName: body.customerName,
       notes: body.notes,
       dueDate: body.dueDate,
-    });
+    }, deviceId);
 
     return NextResponse.json({
       success: true,
