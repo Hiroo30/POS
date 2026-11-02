@@ -20,11 +20,11 @@ export default function MaintenancePage() {
 
   // Receipt & Store Settings
   const [storeName, setStoreName] = useState("TOKO DEWI");
-  const [storeAddress, setStoreAddress] = useState("Jl. Melati No. 12, RT 02/RW 04");
+  const [storeAddress, setStoreAddress] = useState("Pasar Karangsembung");
   const [storePhone, setStorePhone] = useState("0823-2038-1500");
   const [receiptFooter, setReceiptFooter] = useState("Terima kasih telah berbelanja di Toko DEWI!");
-  const [cashierName, setCashierName] = useState("Kasir Dewi");
-  const [cashierRole, setCashierRole] = useState("Kasir Utama Toko");
+  const [cashierName, setCashierName] = useState("Dewi");
+  const [cashierRole, setCashierRole] = useState("Owner");
   const [printerWidth, setPrinterWidth] = useState<"58mm" | "80mm">("58mm");
   const [testScanInput, setTestScanInput] = useState("");
   const [scaleWeight, setScaleWeight] = useState("0.000");

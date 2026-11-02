@@ -9,11 +9,11 @@ export interface StoreSettings {
 
 export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   storeName: "TOKO DEWI",
-  storeAddress: "Jl. Melati No. 12, RT 02/RW 04",
+  storeAddress: "Pasar Karangsembung",
   storePhone: "0823-2038-1500",
   receiptFooter: "Terima kasih telah berbelanja di Toko DEWI!",
-  cashierName: "Kasir Dewi",
-  cashierRole: "Kasir Utama Toko",
+  cashierName: "Dewi",
+  cashierRole: "Owner",
 };
 
 const STORAGE_KEY = "toko_dewi_store_settings";
