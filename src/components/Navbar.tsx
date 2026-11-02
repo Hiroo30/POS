@@ -52,8 +52,8 @@ export default function Navbar() {
 
   return (
     <>
-      {/* ─── DESKTOP SIDEBAR (Visible on md+ screens: >=768px) ─── */}
-      <aside className="hidden md:flex fixed left-0 top-0 h-full w-64 bg-[#1b2e1f] text-white flex-col justify-between shadow-xl z-50 border-r border-emerald-950/40 select-none">
+      {/* ─── DESKTOP SIDEBAR (Visible on screens >= 768px) ─── */}
+      <aside className="app-sidebar fixed left-0 top-0 h-full w-64 bg-[#1b2e1f] text-white flex flex-col justify-between shadow-xl z-50 border-r border-emerald-950/40 select-none">
         <div className="flex flex-col">
           {/* Brand Header */}
           <div className="p-5 border-b border-white/10">
@@ -141,7 +141,7 @@ export default function Navbar() {
       </aside>
 
       {/* ─── MOBILE TOP APP HEADER (Visible on screens < 768px) ─── */}
-      <header className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white/95 backdrop-blur-md border-b border-slate-200/80 z-40 flex items-center justify-between px-3.5 select-none shadow-xs">
+      <header className="app-mobile-header fixed top-0 left-0 right-0 h-14 bg-white/95 backdrop-blur-md border-b border-slate-200/80 z-40 flex items-center justify-between px-3.5 select-none shadow-xs">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-emerald-700 flex items-center justify-center text-white shrink-0 shadow-xs">
             <span className="material-symbols-outlined text-[20px]">storefront</span>
@@ -174,7 +174,7 @@ export default function Navbar() {
       </header>
 
       {/* ─── MOBILE BOTTOM TAB BAR (Visible on screens < 768px) ─── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/95 backdrop-blur-md border-t border-slate-200/80 z-40 flex items-center justify-around px-1 pb-safe shadow-[0_-2px_12px_rgba(0,0,0,0.06)] select-none">
+      <nav className="app-mobile-nav fixed bottom-0 left-0 right-0 h-16 bg-white/95 backdrop-blur-md border-t border-slate-200/80 z-40 flex items-center justify-around px-1 pb-safe shadow-[0_-2px_12px_rgba(0,0,0,0.06)] select-none">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
           return (

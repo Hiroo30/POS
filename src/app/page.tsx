@@ -184,7 +184,7 @@ export default function PosPage() {
     <>
       {/* Top Header Navigation Bar (Stitch Design - Desktop Only) */}
       <header
-        className="hidden md:flex items-center justify-between sticky top-0 z-30 px-5 bg-white border-b border-slate-200 shadow-2xs"
+        className="app-desktop-header items-center justify-between sticky top-0 z-30 px-5 bg-white border-b border-slate-200 shadow-2xs"
         style={{ height: 60 }}
       >
         {/* Search & Barcode Scan Bar */}
@@ -270,13 +270,13 @@ export default function PosPage() {
       </header>
 
       {/* Main POS Layout */}
-      <div className="flex flex-col lg:flex-row flex-1 lg:h-[calc(100vh-60px)] lg:overflow-hidden">
+      <div className="flex flex-col md:flex-row flex-1 md:h-[calc(100vh-60px)] md:overflow-hidden">
         {/* Left Column: Metrics + Customer Select + Categories + Catalog */}
-        <div className="flex-1 flex flex-col min-w-0 lg:overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0 md:overflow-hidden">
           {/* Top Control Section */}
           <div className="p-3 md:p-4 bg-slate-50 border-b border-slate-200">
             {/* Mobile Barcode & Search Input (Visible on mobile only) */}
-            <div className="md:hidden relative mb-3">
+            <div className="mobile-only relative mb-3">
               <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">
                 search
               </span>
@@ -456,7 +456,7 @@ export default function PosPage() {
 
       {/* Mobile Floating Cart Trigger (Visible on Phones < 768px when items added) */}
       {cart.length > 0 && (
-        <div className="kp-floating-cart" onClick={() => setShowCart(true)}>
+        <div className="kp-floating-cart app-floating-cart" onClick={() => setShowCart(true)}>
           <div style={{display: "flex", alignItems: "center", gap: 10}}>
             <div style={{
               background: "#ffffff", color: "#006c49",

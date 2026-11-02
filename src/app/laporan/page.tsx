@@ -74,7 +74,7 @@ export default function LaporanPage() {
   return (
     <>
       {/* Header Bar */}
-      <div style={{
+      <div className="desktop-only" style={{
         height: 60, background: "#ffffff", borderBottom: "1px solid #e2e8f0",
         padding: "0 20px", display: "flex", alignItems: "center", justifyContent: "space-between",
         boxShadow: "0 1px 4px rgba(0,0,0,0.02)", zIndex: 30, position: "sticky", top: 0

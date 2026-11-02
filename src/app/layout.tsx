@@ -39,7 +39,7 @@ export default function RootLayout({
       <body className="h-full bg-[#f4f6fb] text-[#131b2e] antialiased">
         <div className="min-h-screen flex flex-col md:flex-row">
           <Navbar />
-          <main className="flex-1 min-w-0 md:pl-64 pt-14 md:pt-0 pb-20 md:pb-6 overflow-x-hidden">
+          <main className="app-main-content flex-1 min-w-0 overflow-x-hidden">
             {children}
           </main>
         </div>

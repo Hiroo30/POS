@@ -26,7 +26,7 @@ export default function CartSidebar({
   }, []);
 
   return (
-    <div className="kp-cart">
+    <div className="app-desktop-cart kp-cart flex flex-col h-full bg-white border-l border-slate-200 shrink-0 w-80 lg:w-96 select-none">
       {/* Header */}
       <div className="kp-cart-header">
         <div style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
