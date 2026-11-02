@@ -4,9 +4,9 @@ import Navbar from "@/components/Navbar";
 import PwaInstallPrompt from "@/components/PwaInstallPrompt";
 
 export const metadata: Metadata = {
-  title: "Toko DEWI — Kasir Pintar Sembako & Manajemen Toko",
+  title: "Aplikasi Inventori",
   description:
-    "Aplikasi Kasir Pintar POS, Katalog Stok, dan Pembukuan Toko Sembako DEWI modern, cepat, dan ramah pengguna.",
+    "Aplikasi Inventori dan POS Toko Sembako modern, cepat, dan ramah pengguna.",
   manifest: "/manifest.json",
   icons: {
     icon: "/icons/icon-192.png",
@@ -15,9 +15,9 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Toko DEWI",
+    title: "Aplikasi Inventori",
   },
-  applicationName: "Toko DEWI",
+  applicationName: "Aplikasi Inventori",
 };
 
 export const viewport: Viewport = {
@@ -50,7 +50,7 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Toko DEWI" />
+        <meta name="apple-mobile-web-app-title" content="Aplikasi Inventori" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
       <body className="h-full bg-[#f4f6fb] text-[#131b2e] antialiased">

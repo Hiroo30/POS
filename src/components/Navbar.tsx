@@ -66,7 +66,7 @@ export default function Navbar() {
                   Toko DEWI
                 </span>
                 <span className="block text-xs text-emerald-300 font-medium truncate">
-                  Warung & Grosir Sembako
+                  Warung
                 </span>
               </div>
             </div>

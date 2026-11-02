@@ -117,7 +117,7 @@ export default function PwaInstallPrompt() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2">
               <h4 className="text-sm font-bold text-white leading-tight">
-                Pasang Aplikasi Toko DEWI
+                Pasang Aplikasi Inventori
               </h4>
               <button
                 onClick={handleDismiss}
@@ -167,7 +167,7 @@ export default function PwaInstallPrompt() {
               <li>Tekan tombol <strong>Bagikan (Share)</strong> di bagian bawah layar Safari (ikon kotak bertanda panah ke atas).</li>
               <li>Gulir ke bawah dan pilih <strong>"Tambah ke Layar Utama" (Add to Home Screen)</strong>.</li>
               <li>Tekan tombol <strong>"Tambah"</strong> di pojok kanan atas.</li>
-              <li>Aplikasi <strong>Toko DEWI</strong> akan muncul langsung di layar utama iPhone Anda!</li>
+              <li>Aplikasi <strong>Inventori Toko</strong> akan muncul langsung di layar utama iPhone Anda!</li>
             </ol>
             <button
               onClick={() => setShowIosGuide(false)}

@@ -1,7 +1,7 @@
 {
-  "name": "Toko DEWI - Kasir Sembako",
-  "short_name": "Toko DEWI",
-  "description": "Aplikasi Kasir POS, Katalog Stok, dan Pembukuan Toko Sembako DEWI",
+  "name": "Aplikasi Inventori",
+  "short_name": "Aplikasi Inventori",
+  "description": "Aplikasi Inventori dan POS Toko Sembako DEWI",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
