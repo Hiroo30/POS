@@ -136,21 +136,23 @@ export default function Navbar() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs md:text-sm transition-all duration-200 active:scale-[0.98] cursor-pointer group ${
+                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs md:text-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.96] cursor-pointer group ${
                       isActive
-                        ? "bg-gradient-to-r from-emerald-600 to-emerald-700 text-white font-bold shadow-md shadow-emerald-950/20 translate-x-1"
-                        : "text-slate-300 hover:bg-white/10 hover:text-white font-medium hover:translate-x-0.5"
+                        ? "bg-gradient-to-r from-emerald-600 via-emerald-600 to-emerald-700 text-white font-bold shadow-lg shadow-emerald-950/30 ring-1 ring-white/15 translate-x-1"
+                        : "text-slate-300 hover:bg-white/10 hover:text-white font-medium hover:translate-x-1"
                     }`}
                   >
                     <span
-                      className="material-symbols-outlined text-[20px] transition-transform duration-200 group-hover:scale-110 group-active:scale-95"
+                      className={`material-symbols-outlined text-[20px] transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+                        isActive ? "scale-110 text-emerald-200" : "group-hover:scale-115 group-active:scale-95"
+                      }`}
                       style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}
                     >
                       {item.iconName}
                     </span>
                     <span className="flex-1 truncate">{item.label}</span>
                     {isActive && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-white shadow-xs animate-pulse"></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 shadow-[0_0_8px_#86efac] animate-pulse"></span>
                     )}
                   </Link>
                 );
@@ -262,23 +264,25 @@ export default function Navbar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex-1 flex flex-col items-center justify-center py-1 transition-all duration-200 active:scale-90 cursor-pointer ${
+              className={`flex-1 flex flex-col items-center justify-center py-1.5 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.88] cursor-pointer ${
                 isActive ? "text-emerald-700 font-bold" : "text-slate-400 hover:text-slate-600 font-medium"
               }`}
             >
               <div
-                className={`px-3 py-1 rounded-full flex items-center justify-center transition-all duration-200 ${
-                  isActive ? "bg-emerald-100 text-emerald-800 scale-105 shadow-xs" : ""
+                className={`px-3.5 py-1 rounded-full flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+                  isActive ? "bg-emerald-100/90 text-emerald-800 scale-110 shadow-xs ring-1 ring-emerald-300/40" : ""
                 }`}
               >
                 <span
-                  className="material-symbols-outlined text-[20px] transition-transform duration-200"
+                  className="material-symbols-outlined text-[20px] transition-transform duration-300"
                   style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}
                 >
                   {item.iconName}
                 </span>
               </div>
-              <span className="text-[10px] mt-0.5 font-medium">{item.shortLabel}</span>
+              <span className={`text-[10px] mt-0.5 transition-colors duration-200 ${isActive ? "font-bold text-emerald-800" : "font-medium"}`}>
+                {item.shortLabel}
+              </span>
             </Link>
           );
         })}
