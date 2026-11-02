@@ -1117,6 +1117,34 @@ body {
 
 /* ─── Print ─────────────────────────────────────────────────── */
 @media print {
-  .kp-sidebar, .kp-topbar, .kp-mobile-nav, .no-print { display: none !important; }
-  .kp-receipt { border: none; max-height: none; }
+  .kp-sidebar, .kp-topbar, .kp-mobile-nav, .no-print, .app-sidebar, .app-mobile-nav, .app-mobile-header, header, nav, aside {
+    display: none !important;
+  }
+  body, html {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+  }
+  main, .app-main-content {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+  .printable-receipt {
+    display: block !important;
+    border: none !important;
+    box-shadow: none !important;
+    width: 100% !important;
+    max-width: 80mm !important;
+    margin: 0 auto !important;
+    padding: 4mm 2mm !important;
+    background: #ffffff !important;
+    font-family: 'Courier New', Courier, monospace !important;
+  }
+  .kp-receipt {
+    border: none !important;
+    max-height: none !important;
+  }
 }

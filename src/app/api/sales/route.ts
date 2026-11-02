@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSales, processSale, getDeviceIdFromRequest } from "@/lib/db";
+import { getSales, processSale, deleteSale, getDeviceIdFromRequest } from "@/lib/db";
 
 export async function GET(request: Request) {
   try {
@@ -46,6 +46,39 @@ export async function POST(request: Request) {
     console.error("Error processing sale:", error);
     return NextResponse.json(
       { success: false, error: "Gagal memproses transaksi penjualan" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const deviceId = getDeviceIdFromRequest(request);
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: "ID transaksi wajib dicantumkan" },
+        { status: 400 }
+      );
+    }
+
+    const success = await deleteSale(id, true, deviceId);
+    if (!success) {
+      return NextResponse.json(
+        { success: false, error: "Transaksi tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Transaksi nota berhasil dibatalkan dan stok dikembalikan",
+    });
+  } catch (error) {
+    console.error("Error deleting sale:", error);
+    return NextResponse.json(
+      { success: false, error: "Gagal membatalkan transaksi" },
       { status: 500 }
     );
   }

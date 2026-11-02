@@ -13,6 +13,12 @@ const navItems = [
     iconName: "point_of_sale",
   },
   {
+    label: "Histori Struk",
+    shortLabel: "Histori",
+    href: "/riwayat",
+    iconName: "receipt_long",
+  },
+  {
     label: "Katalog & Stok",
     shortLabel: "Katalog",
     href: "/produk",

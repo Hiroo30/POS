@@ -663,6 +663,43 @@ export async function getSales(limit = 100, deviceId?: string): Promise<SaleTran
   return (db.sales || []).slice(0, limit);
 }
 
+export async function deleteSale(
+  id: string,
+  restoreStock = true,
+  deviceId?: string
+): Promise<boolean> {
+  const db = await getDbState(deviceId);
+  if (!db.sales) return false;
+  const index = db.sales.findIndex((s) => s.id === id);
+  if (index === -1) return false;
+  const sale = db.sales[index];
+
+  // Kembalikan stok produk jika diminta
+  if (restoreStock && sale.items && db.products) {
+    for (const item of sale.items) {
+      const prodIndex = db.products.findIndex((p) => p.id === item.productId);
+      if (prodIndex !== -1) {
+        const prod = db.products[prodIndex];
+        const baseQty =
+          item.unitUsed === "PACK" && prod.packConversion
+            ? item.quantity * prod.packConversion
+            : item.quantity;
+        prod.stockInBase += baseQty;
+        prod.updatedAt = new Date().toISOString();
+      }
+    }
+  }
+
+  // Hapus data kasbon yang terikat dengan penjualan ini (jika ada)
+  if (db.kasbon) {
+    db.kasbon = db.kasbon.filter((b) => b.saleId !== id);
+  }
+
+  db.sales.splice(index, 1);
+  await saveDbState(db, deviceId);
+  return true;
+}
+
 // ─── Kasbon (Buku Hutang Pelanggan) ──────────────────────────────────────────
 
 export async function getKasbonList(deviceId?: string): Promise<KasbonRecord[]> {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import Link from "next/link";
 import type { Product, CartItem, SaleTransaction } from "@/lib/types";
 import CategoryFilter from "@/components/CategoryFilter";
 import PosProductCard from "@/components/PosProductCard";
@@ -379,11 +380,17 @@ export default function PosPage() {
             {/* Top Metrics Ribbon (Stitch Design: 4 KPIs) */}
             <div className="grid-3" style={{marginBottom: 10, gap: 10}}>
               {/* Metric 1: Transaksi Selesai */}
-              <div style={{
-                background: "#ffffff", padding: "10px 14px", borderRadius: 12,
-                boxShadow: "0 1px 3px rgba(0,0,0,0.04)", border: "1px solid #e2e8f0",
-                display: "flex", alignItems: "center", justifyContent: "space-between"
-              }}>
+              <Link
+                href="/riwayat"
+                title="Buka Histori Struk & Penjualan"
+                style={{
+                  background: "#ffffff", padding: "10px 14px", borderRadius: 12,
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.04)", border: "1px solid #e2e8f0",
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  textDecoration: "none", cursor: "pointer", transition: "all 0.2s"
+                }}
+                className="hover:border-emerald-500 hover:shadow-md active:scale-98"
+              >
                 <div>
                   <div style={{fontSize: 9.5, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5}}>
                     Transaksi Selesai
@@ -391,19 +398,20 @@ export default function PosPage() {
                   <div style={{fontSize: 16, fontWeight: 800, color: "#0f172a", marginTop: 2}}>
                     {summary?.todaySales ?? 0} Nota
                   </div>
-                  <div style={{fontSize: 10, color: "#10b981", fontWeight: 600, marginTop: 2}}>
-                    ↑ Hari Ini
+                  <div style={{fontSize: 10, color: "#006c49", fontWeight: 700, marginTop: 2, display: "flex", alignItems: "center", gap: 3}}>
+                    <span>Lihat Histori Struk</span>
+                    <span style={{fontSize: 12}}>→</span>
                   </div>
                 </div>
                 <div style={{
-                  width: 32, height: 32, borderRadius: 8, background: "#f1f5f9",
+                  width: 32, height: 32, borderRadius: 8, background: "#f0fdf4",
                   display: "flex", alignItems: "center", justifyContent: "center", color: "#006c49"
                 }}>
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
                   </svg>
                 </div>
-              </div>
+              </Link>
 
               {/* Metric 2: Omzet Hari Ini */}
               <div style={{
