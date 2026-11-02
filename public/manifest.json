@@ -2,14 +2,12 @@
   "id": "/",
   "name": "Aplikasi Inventori",
   "short_name": "Inventori",
-  "description": "Aplikasi Inventori dan POS Toko Sembako DEWI",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#006c49",
   "theme_color": "#006c49",
   "orientation": "any",
-  "categories": ["business", "finance", "productivity", "utilities"],
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -34,29 +32,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    }
-  ],
-  "shortcuts": [
-    {
-      "name": "Kasir POS",
-      "short_name": "Kasir",
-      "description": "Buka terminal kasir penjualan",
-      "url": "/?source=shortcut",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Katalog Stok",
-      "short_name": "Katalog",
-      "description": "Lihat dan kelola stok barang",
-      "url": "/produk?source=shortcut",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Buku Kasbon",
-      "short_name": "Kasbon",
-      "description": "Catat hutang pelanggan",
-      "url": "/kasbon?source=shortcut",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }
