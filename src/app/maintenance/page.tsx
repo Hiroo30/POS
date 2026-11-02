@@ -338,23 +338,29 @@ export default function MaintenancePage() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as TabId)}
-                  className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs md:text-sm text-left transition-all font-semibold ${
+                  className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs md:text-sm text-left font-semibold cursor-pointer transition-all duration-200 active:scale-[0.97] ${
                     isActive
-                      ? "bg-emerald-700 text-white shadow-sm"
+                      ? "bg-emerald-700 text-white shadow-md shadow-emerald-950/20 translate-x-1"
                       : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                   }`}
                   type="button"
                 >
                   <div className="flex items-center gap-3">
                     <span
-                      className="material-symbols-outlined text-[20px]"
+                      className={`material-symbols-outlined text-[20px] transition-transform duration-200 ${
+                        isActive ? "scale-110 text-emerald-100" : ""
+                      }`}
                       style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}
                     >
                       {tab.icon}
                     </span>
                     <span>{tab.label}</span>
                   </div>
-                  <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+                  <span className={`material-symbols-outlined text-[16px] transition-transform duration-200 ${
+                    isActive ? "translate-x-0.5 text-emerald-200" : "text-slate-400"
+                  }`}>
+                    chevron_right
+                  </span>
                 </button>
               );
             })}
@@ -385,6 +391,7 @@ export default function MaintenancePage() {
 
         {/* Content Panels */}
         <main className="lg:col-span-9 space-y-6">
+          <div key={activeTab} className="ios-tab-content space-y-6">
           {/* TAB 1: CADANGAN & DATABASE */}
           {activeTab === "cadangan" && (
             <div className="space-y-6">
@@ -905,6 +912,7 @@ export default function MaintenancePage() {
               </div>
             </div>
           )}
+          </div>
         </main>
       </div>
 

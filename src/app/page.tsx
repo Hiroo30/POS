@@ -486,11 +486,11 @@ export default function PosPage() {
                     <button
                       type="button"
                       onClick={() => setSelectedCustomer(c)}
+                      className="cursor-pointer active:scale-95 transition-all duration-200"
                       style={{
                         padding: "4px 10px",
                         fontSize: 11,
                         fontWeight: 700,
-                        cursor: "pointer",
                         border: isSelected ? "none" : "1px solid #e2e8f0",
                         background: isSelected ? "#006c49" : "#ffffff",
                         color: isSelected ? "#ffffff" : "#475569",
@@ -498,7 +498,6 @@ export default function PosPage() {
                         borderBottomRightRadius: isWalkIn ? 8 : 0,
                         borderTopLeftRadius: 8,
                         borderBottomLeftRadius: 8,
-                        transition: "all 0.15s ease",
                       }}
                     >
                       {c}
@@ -568,6 +567,7 @@ export default function PosPage() {
 
           {/* Product Grid Area */}
           <div style={{flex: 1, overflowY: "auto", padding: "14px 18px 110px", background: "#f4f6fb"}}>
+            <div key={selectedCategory} className="ios-tab-content">
             {isLoading ? (
               <div style={{textAlign: "center", padding: 60, color: "#94a3b8"}}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{animation: "spin 1s linear infinite", display: "inline-block"}}>
@@ -622,6 +622,7 @@ export default function PosPage() {
                 ))}
               </div>
             )}
+            </div>
           </div>
         </div>
 

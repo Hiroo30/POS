@@ -295,12 +295,13 @@ export default function KasbonPage() {
                     <button
                       key={t.key}
                       onClick={() => setFilter(t.key as typeof filter)}
+                      className="cursor-pointer active:scale-95 transition-all duration-200"
                       style={{
                         padding: "5px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: 700,
-                        border: "none", cursor: "pointer",
+                        border: "none",
                         background: active ? (t.key === "JATUH_TEMPO" ? "#dc2626" : "#006c49") : "#f1f5f9",
                         color: active ? "#ffffff" : "#475569",
-                        transition: "all 0.15s"
+                        boxShadow: active ? "0 2px 8px rgba(0,0,0,0.12)" : "none",
                       }}
                     >
                       {t.label}
@@ -331,6 +332,7 @@ export default function KasbonPage() {
             </div>
 
             {/* List of Debt Ledger Cards */}
+            <div key={`${filter}_${search}`} className="ios-tab-content space-y-3">
             {isLoading ? (
               <div style={{textAlign: "center", padding: 60, color: "#94a3b8"}}>Memuat buku kasbon...</div>
             ) : filtered.length === 0 ? (
@@ -450,6 +452,7 @@ export default function KasbonPage() {
                 );
               })
             )}
+            </div>
           </div>
 
           {/* Right Column: Catat Kasbon Cepat (Direct Form - Stitch Design) */}

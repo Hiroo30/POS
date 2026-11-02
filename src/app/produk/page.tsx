@@ -416,9 +416,9 @@ export default function ProdukPage() {
                 <button
                   type="button"
                   onClick={() => setFilterMode("ALL")}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
                     filterMode === "ALL"
-                      ? "bg-white text-slate-800 shadow-2xs"
+                      ? "bg-white text-slate-800 shadow-sm scale-[1.02]"
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
@@ -427,9 +427,9 @@ export default function ProdukPage() {
                 <button
                   type="button"
                   onClick={() => setFilterMode("LOW")}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer flex items-center gap-1 ${
                     filterMode === "LOW"
-                      ? "bg-amber-500 text-white shadow-2xs"
+                      ? "bg-amber-500 text-white shadow-sm scale-[1.02]"
                       : "text-amber-700 hover:text-amber-900"
                   }`}
                 >
@@ -439,9 +439,9 @@ export default function ProdukPage() {
                 <button
                   type="button"
                   onClick={() => setFilterMode("OUT")}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer flex items-center gap-1 ${
                     filterMode === "OUT"
-                      ? "bg-rose-600 text-white shadow-2xs"
+                      ? "bg-rose-600 text-white shadow-sm scale-[1.02]"
                       : "text-rose-700 hover:text-rose-900"
                   }`}
                 >
@@ -451,9 +451,9 @@ export default function ProdukPage() {
                 <button
                   type="button"
                   onClick={() => setFilterMode("SAFE")}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
                     filterMode === "SAFE"
-                      ? "bg-emerald-700 text-white shadow-2xs"
+                      ? "bg-emerald-700 text-white shadow-sm scale-[1.02]"
                       : "text-emerald-800 hover:text-emerald-950"
                   }`}
                 >
@@ -472,6 +472,7 @@ export default function ProdukPage() {
             </div>
           </div>
 
+          <div key={`${selectedCategory}_${filterMode}_${sortBy}`} className="ios-tab-content">
           {/* Loading Indicator */}
           {isLoading ? (
             <div className="py-20 text-center text-slate-400 space-y-2">
@@ -836,6 +837,7 @@ export default function ProdukPage() {
               </div>
             </>
           )}
+          </div>
         </div>
       </div>
 

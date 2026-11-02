@@ -323,9 +323,9 @@ export default function RiwayatPage() {
         <div className="flex items-center gap-2 mb-5 border-b border-slate-200 pb-2">
           <button
             onClick={() => setActiveTab("SALES")}
-            className={`px-4 py-2 rounded-xl font-bold text-xs md:text-sm flex items-center gap-2 transition cursor-pointer ${
+            className={`px-4 py-2 rounded-xl font-bold text-xs md:text-sm flex items-center gap-2 transition-all duration-200 active:scale-95 cursor-pointer ${
               activeTab === "SALES"
-                ? "bg-emerald-700 text-white shadow-sm"
+                ? "bg-emerald-700 text-white shadow-md shadow-emerald-950/20"
                 : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
             }`}
           >
@@ -334,9 +334,9 @@ export default function RiwayatPage() {
           </button>
           <button
             onClick={() => setActiveTab("MUTASI")}
-            className={`px-4 py-2 rounded-xl font-bold text-xs md:text-sm flex items-center gap-2 transition cursor-pointer ${
+            className={`px-4 py-2 rounded-xl font-bold text-xs md:text-sm flex items-center gap-2 transition-all duration-200 active:scale-95 cursor-pointer ${
               activeTab === "MUTASI"
-                ? "bg-emerald-700 text-white shadow-sm"
+                ? "bg-emerald-700 text-white shadow-md shadow-emerald-950/20"
                 : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
             }`}
           >
@@ -345,6 +345,7 @@ export default function RiwayatPage() {
           </button>
         </div>
 
+        <div key={activeTab} className="ios-tab-content">
         {activeTab === "SALES" ? (
           <>
             {/* ─── SUMMARY STATS CARDS ─── */}
@@ -447,10 +448,10 @@ export default function RiwayatPage() {
                     <button
                       key={df.key}
                       onClick={() => setDateFilter(df.key)}
-                      className={`px-3 py-2 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                      className={`px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 shrink-0 cursor-pointer ${
                         dateFilter === df.key
-                          ? "bg-slate-900 text-white shadow-xs"
-                          : "bg-slate-100 text-slate-600 hover:bg-slate-200/70"
+                          ? "bg-slate-900 text-white shadow-sm scale-[1.02]"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200/80"
                       }`}
                     >
                       {df.label}
@@ -474,9 +475,9 @@ export default function RiwayatPage() {
                   <button
                     key={pf.key}
                     onClick={() => setPaymentFilter(pf.key)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
                       paymentFilter === pf.key
-                        ? "bg-emerald-700 text-white shadow-xs"
+                        ? "bg-emerald-700 text-white shadow-sm scale-[1.02]"
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200/80"
                     }`}
                   >
@@ -931,6 +932,7 @@ export default function RiwayatPage() {
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* ─── MODAL KONFIRMASI BATALKAN TRANSAKSI (VOID) ─── */}
