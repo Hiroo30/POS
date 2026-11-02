@@ -1,5 +1,5 @@
 // Toko DEWI Service Worker for PWA
-const CACHE_NAME = 'toko-dewi-cache-v1';
+const CACHE_NAME = 'toko-dewi-cache-v2';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -15,7 +15,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(STATIC_ASSETS).catch((err) => {
-        console.warn('PWA cache error:', err);
+        console.warn('PWA cache pre-fetch notice:', err);
       });
     })
   );
@@ -40,10 +40,19 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For navigation requests (HTML pages)
+  // Navigation requests: Network first with offline cached fallback
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match(event.request).then(res => res || caches.match('/')))
+      fetch(event.request).catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        const root = await caches.match('/');
+        if (root) return root;
+        return new Response('Aplikasi Inventori sedang offline', {
+          status: 200,
+          headers: { 'Content-Type': 'text/html; charset=utf-8' }
+        });
+      })
     );
     return;
   }

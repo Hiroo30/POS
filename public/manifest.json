@@ -2,6 +2,7 @@
   "id": "/",
   "name": "Aplikasi Inventori",
   "short_name": "Inventori",
+  "description": "Aplikasi Inventori dan POS Toko DEWI",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

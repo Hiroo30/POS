@@ -15,18 +15,25 @@ export default function PwaInstallPrompt() {
   const [showIosGuide, setShowIosGuide] = useState<boolean>(false);
 
   useEffect(() => {
-    // 1. Register Service Worker
+    // 1. Register Service Worker immediately
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
+      const registerSW = () => {
         navigator.serviceWorker
-          .register("/sw.js")
+          .register("/sw.js", { scope: "/" })
           .then((reg) => {
             console.log("PWA Service Worker registered:", reg.scope);
+            reg.update();
           })
           .catch((err) => {
             console.warn("Service Worker registration failed:", err);
           });
-      });
+      };
+
+      if (document.readyState === "complete" || document.readyState === "interactive") {
+        registerSW();
+      } else {
+        window.addEventListener("load", registerSW);
+      }
     }
 
     // 2. Check if already running in standalone mode (installed PWA)
