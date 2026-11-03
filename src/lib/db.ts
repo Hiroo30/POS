@@ -1184,6 +1184,15 @@ export async function redeemCustomerPoints(
   pointsToRedeem: number,
   deviceId?: string
 ): Promise<{ success: boolean; customer?: Customer; error?: string }> {
+  if (
+    typeof pointsToRedeem !== "number" ||
+    !Number.isFinite(pointsToRedeem) ||
+    !Number.isInteger(pointsToRedeem) ||
+    pointsToRedeem <= 0
+  ) {
+    return { success: false, error: "Jumlah poin yang ditukarkan harus berupa bilangan bulat positif (> 0)" };
+  }
+
   const db = await getDbState(deviceId);
   if (!db.customers) return { success: false, error: "Pelanggan belum terdaftar" };
   const idx = db.customers.findIndex((c) => c.id === customerId);

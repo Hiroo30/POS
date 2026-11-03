@@ -84,8 +84,8 @@ export default function ExpenseModal({ isOpen, onClose, onSuccess, cashDrawerAmo
   };
 
   return (
-    <div className="kp-modal-overlay">
-      <div className="kp-modal" style={{ maxWidth: 440 }}>
+    <div className="kp-modal-overlay animate-fadeIn">
+      <div className="kp-modal animate-scaleUp" style={{ maxWidth: 440 }}>
         {/* Header */}
         <div className="kp-modal-header" style={{ background: "linear-gradient(135deg, #ea580c 0%, #c2410c 100%)" }}>
           <div>
@@ -224,12 +224,12 @@ export default function ExpenseModal({ isOpen, onClose, onSuccess, cashDrawerAmo
           </div>
 
           <div style={{ padding: "0 20px 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            <button type="button" className="kp-btn-secondary" onClick={onClose} style={{ justifyContent: "center" }}>
+            <button type="button" className="kp-btn-secondary ios-tap" onClick={onClose} style={{ justifyContent: "center" }}>
               Batal
             </button>
             <button
               type="submit"
-              className="kp-btn-primary"
+              className="kp-btn-primary ios-tap"
               disabled={isLoading}
               style={{ justifyContent: "center", background: "#ea580c" }}
             >

@@ -30,15 +30,22 @@ export async function POST(request: Request) {
 
     // Check if this is a point redemption action
     if (body.action === "REDEEM") {
-      if (!body.customerId || !body.pointsToRedeem) {
+      const pointsToRedeem = Number(body.pointsToRedeem);
+      if (
+        !body.customerId ||
+        typeof pointsToRedeem !== "number" ||
+        !Number.isFinite(pointsToRedeem) ||
+        !Number.isInteger(pointsToRedeem) ||
+        pointsToRedeem <= 0
+      ) {
         return NextResponse.json(
-          { success: false, error: "Data penukaran poin tidak lengkap" },
+          { success: false, error: "Jumlah poin yang ditukarkan harus berupa bilangan bulat positif (> 0)" },
           { status: 400 }
         );
       }
       const result = await redeemCustomerPoints(
         body.customerId,
-        Number(body.pointsToRedeem),
+        pointsToRedeem,
         deviceId
       );
       if (!result.success) {

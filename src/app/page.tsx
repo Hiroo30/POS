@@ -111,7 +111,7 @@ export default function PosPage() {
     setShowAddCustomerModal(false);
   };
 
-  const handleDeleteCustomer = (nameToDelete: string) => {
+  const handleDeleteCustomer = async (nameToDelete: string) => {
     if (nameToDelete === "Walk-in (Umum)") return;
     const updated = customers.filter((c) => c !== nameToDelete);
     setCustomers(updated);
@@ -123,6 +123,21 @@ export default function PosPage() {
         localStorage.setItem(`pos_customers_${deviceId}`, JSON.stringify(updated));
       }
     } catch {}
+
+    // Sinkronisasi hapus dari database jika tersimpan sebagai rekaman pelanggan
+    const custRec = customerRecords.find(
+      (c) => c.name.toLowerCase() === nameToDelete.toLowerCase()
+    );
+    if (custRec && custRec.id) {
+      try {
+        await deviceFetch(`/api/customers?id=${encodeURIComponent(custRec.id)}`, {
+          method: "DELETE",
+        });
+        setCustomerRecords((prev) => prev.filter((c) => c.id !== custRec.id));
+      } catch (e) {
+        console.error("Gagal sinkronisasi hapus customer ke server:", e);
+      }
+    }
   };
 
   const handleSaveCashDrawer = (newAmount: number) => {

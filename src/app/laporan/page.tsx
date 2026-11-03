@@ -228,6 +228,16 @@ export default function LaporanPage() {
     KASBON: "#dc2626",
   };
 
+// Helper untuk mencegah CSV Formula Injection (=, +, -, @, \t, \r) saat dibuka di spreadsheet
+function sanitizeCsvCell(val: string | number | boolean | undefined | null): string {
+  if (val === null || val === undefined) return '""';
+  let str = String(val);
+  if (/^[=\+\-@\t\r]/.test(str)) {
+    str = "'" + str;
+  }
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
   const handleExportCSV = () => {
     let headers = "";
     let rows = "";
@@ -236,27 +246,48 @@ export default function LaporanPage() {
     if (activeTab === "EXPENSES") {
       headers = "Waktu,Kategori,Keterangan,Nominal,Potong Dari Laci\n";
       rows = filteredExpenses
-        .map(
-          (e) =>
-            `"${new Date(e.createdAt).toLocaleString("id-ID")}","${e.category}","${e.description.replace(/"/g, '""')}",${e.amount},${e.paidFromDrawer ? "YA" : "TIDAK"}`
+        .map((e) =>
+          [
+            sanitizeCsvCell(new Date(e.createdAt).toLocaleString("id-ID")),
+            sanitizeCsvCell(e.category),
+            sanitizeCsvCell(e.description),
+            e.amount,
+            sanitizeCsvCell(e.paidFromDrawer ? "YA" : "TIDAK"),
+          ].join(",")
         )
         .join("\n");
       filename = `Pengeluaran_Toko_${new Date().toISOString().slice(0, 10)}.csv`;
     } else if (activeTab === "CUSTOMERS") {
       headers = "Nama Pelanggan,No. HP/WA,Poin Aktif,Total Belanja,Kunjungan,Belanja Terakhir\n";
       rows = customers
-        .map(
-          (c) =>
-            `"${c.name.replace(/"/g, '""')}","${c.phone || "-"}","${c.points}",${c.totalSpent},${c.visitCount},"${new Date(c.updatedAt || c.createdAt).toLocaleDateString("id-ID")}"`
+        .map((c) =>
+          [
+            sanitizeCsvCell(c.name),
+            sanitizeCsvCell(c.phone || "-"),
+            c.points,
+            c.totalSpent,
+            c.visitCount,
+            sanitizeCsvCell(
+              new Date(c.updatedAt || c.createdAt).toLocaleDateString("id-ID")
+            ),
+          ].join(",")
         )
         .join("\n");
       filename = `Loyalitas_Poin_Pelanggan_${new Date().toISOString().slice(0, 10)}.csv`;
     } else {
       headers = "No. Nota,Waktu,Pelanggan,Metode,Total,Laba,Poin Didapat,Poin Ditukar\n";
       rows = filteredSales
-        .map(
-          (s) =>
-            `"${s.receiptNo}","${new Date(s.createdAt).toLocaleString("id-ID")}","${(s.customerName || "Umum").replace(/"/g, '""')}","${s.paymentMethod}",${s.totalAmount},${s.profit},${s.pointsEarned || 0},${s.pointsRedeemed || 0}`
+        .map((s) =>
+          [
+            sanitizeCsvCell(s.receiptNo),
+            sanitizeCsvCell(new Date(s.createdAt).toLocaleString("id-ID")),
+            sanitizeCsvCell(s.customerName || "Umum"),
+            sanitizeCsvCell(s.paymentMethod),
+            s.totalAmount,
+            s.profit,
+            s.pointsEarned || 0,
+            s.pointsRedeemed || 0,
+          ].join(",")
         )
         .join("\n");
       filename = `Laporan_Penjualan_Toko_${new Date().toISOString().slice(0, 10)}.csv`;
@@ -278,6 +309,21 @@ export default function LaporanPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Gagal menghapus");
+      playSuccessSound();
+      loadData();
+    } catch (err: unknown) {
+      alert((err as Error).message);
+    }
+  };
+
+  const handleDeleteCustomer = async (id: string, name: string) => {
+    if (!confirm(`Hapus pelanggan "${name}"?\nSemua riwayat poin dan kontaknya akan dihapus.`)) return;
+    try {
+      const res = await deviceFetch(`/api/customers?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Gagal menghapus pelanggan");
       playSuccessSound();
       loadData();
     } catch (err: unknown) {
@@ -315,8 +361,12 @@ export default function LaporanPage() {
   const handleRedeemPointsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomerForRedeem) return;
-    if (pointsToRedeemInput <= 0 || pointsToRedeemInput > selectedCustomerForRedeem.points) {
-      alert("Jumlah poin tidak valid atau melebihi saldo pelanggan!");
+    if (
+      pointsToRedeemInput < 10 ||
+      pointsToRedeemInput % 10 !== 0 ||
+      pointsToRedeemInput > selectedCustomerForRedeem.points
+    ) {
+      alert("Jumlah penukaran harus berupa kelipatan 10 (minimal 10 poin) dan tidak melebihi saldo pelanggan!");
       return;
     }
     setIsSubmitting(true);
@@ -768,6 +818,7 @@ export default function LaporanPage() {
           <button
             type="button"
             onClick={() => setActiveTab("SALES")}
+            className="ios-tap"
             style={{
               padding: "8px 16px",
               borderRadius: 10,
@@ -791,6 +842,7 @@ export default function LaporanPage() {
           <button
             type="button"
             onClick={() => setActiveTab("EXPENSES")}
+            className="ios-tap"
             style={{
               padding: "8px 16px",
               borderRadius: 10,
@@ -814,6 +866,7 @@ export default function LaporanPage() {
           <button
             type="button"
             onClick={() => setActiveTab("CUSTOMERS")}
+            className="ios-tap"
             style={{
               padding: "8px 16px",
               borderRadius: 10,
@@ -837,7 +890,7 @@ export default function LaporanPage() {
 
         {/* TAB 1: OMZET & PENJUALAN */}
         {activeTab === "SALES" && (
-          <div>
+          <div key="tab-sales" className="ios-tab-content">
             {/* 2-Column Main Split */}
             <div
               style={{
@@ -1250,7 +1303,7 @@ export default function LaporanPage() {
 
         {/* TAB 2: PENGELUARAN TOKO (ARUS KAS KELUAR) */}
         {activeTab === "EXPENSES" && (
-          <div>
+          <div key="tab-expenses" className="ios-tab-content">
             {/* Top Expenses Ribbon */}
             <div
               style={{
@@ -1549,7 +1602,7 @@ export default function LaporanPage() {
 
         {/* TAB 3: LOYALITAS & POIN PELANGGAN (THR SEMBAKO) */}
         {activeTab === "CUSTOMERS" && (
-          <div>
+          <div key="tab-customers" className="ios-tab-content">
             {/* Loyalty Program Information Banner */}
             <div
               style={{
@@ -1579,6 +1632,7 @@ export default function LaporanPage() {
               <button
                 type="button"
                 onClick={() => setShowAddCustomerModal(true)}
+                className="ios-tap"
                 style={{
                   background: "#b45309",
                   border: "none",
@@ -1592,6 +1646,7 @@ export default function LaporanPage() {
                   alignItems: "center",
                   gap: 6,
                   boxShadow: "0 2px 6px rgba(180,83,9,0.3)",
+                  transition: "all 0.15s ease",
                 }}
               >
                 <span className="material-symbols-outlined text-[16px]">person_add</span>
@@ -1601,15 +1656,15 @@ export default function LaporanPage() {
 
             {/* Mini Loyalty KPI Grid */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 16 }}>
-              <div style={{ background: "#ffffff", padding: 14, borderRadius: 12, border: "1px solid #e2e8f0" }}>
+              <div style={{ background: "#ffffff", padding: 14, borderRadius: 12, border: "1px solid #e2e8f0", transition: "all 0.2s ease" }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Pelanggan Terdaftar</div>
                 <div style={{ fontSize: 20, fontWeight: 900, color: "#0f172a", marginTop: 4 }}>{customers.length} Orang</div>
               </div>
-              <div style={{ background: "#ffffff", padding: 14, borderRadius: 12, border: "1px solid #e2e8f0" }}>
+              <div style={{ background: "#ffffff", padding: 14, borderRadius: 12, border: "1px solid #e2e8f0", transition: "all 0.2s ease" }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Total Poin Aktif Beredar</div>
                 <div style={{ fontSize: 20, fontWeight: 900, color: "#b45309", marginTop: 4 }}>⭐ {totalPointsActive} Poin</div>
               </div>
-              <div style={{ background: "#ffffff", padding: 14, borderRadius: 12, border: "1px solid #e2e8f0" }}>
+              <div style={{ background: "#ffffff", padding: 14, borderRadius: 12, border: "1px solid #e2e8f0", transition: "all 0.2s ease" }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Nilai Klaim THR / Hadiah</div>
                 <div style={{ fontSize: 20, fontWeight: 900, color: "#047857", marginTop: 4 }}>
                   {formatRupiah(Math.floor(totalPointsActive / 10) * 5000)}
@@ -1656,14 +1711,14 @@ export default function LaporanPage() {
                           <th style={{ textAlign: "right" }}>Total Belanja</th>
                           <th style={{ textAlign: "center" }}>Kunjungan</th>
                           <th>Belanja Terakhir</th>
-                          <th style={{ textAlign: "center" }}>Aksi</th>
+                          <th style={{ textAlign: "center", width: 180 }}>Aksi</th>
                         </tr>
                       </thead>
                       <tbody>
                         {sortedCustomers.map((cust, idx) => {
                           const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`;
                           return (
-                            <tr key={cust.id}>
+                            <tr key={cust.id} style={{ transition: "background-color 0.15s ease" }} className="hover:bg-amber-50/40">
                               <td style={{ textAlign: "center", fontWeight: 800, fontSize: 13 }}>
                                 {medal}
                               </td>
@@ -1712,6 +1767,7 @@ export default function LaporanPage() {
                                       setPointsToRedeemInput(Math.min(cust.points, 10));
                                     }}
                                     disabled={cust.points < 10}
+                                    className="ios-tap"
                                     style={{
                                       padding: "4px 8px",
                                       borderRadius: 6,
@@ -1721,6 +1777,7 @@ export default function LaporanPage() {
                                       fontSize: 10.5,
                                       fontWeight: 700,
                                       cursor: cust.points >= 10 ? "pointer" : "not-allowed",
+                                      transition: "all 0.15s ease",
                                     }}
                                     title={cust.points >= 10 ? "Tukar Poin Jadi Diskon / Hadiah" : "Minimal 10 poin untuk ditukar"}
                                   >
@@ -1729,6 +1786,7 @@ export default function LaporanPage() {
                                   <button
                                     type="button"
                                     onClick={() => handleSendWaPoints(cust)}
+                                    className="ios-tap"
                                     style={{
                                       padding: "4px 8px",
                                       borderRadius: 6,
@@ -1738,10 +1796,33 @@ export default function LaporanPage() {
                                       fontSize: 10.5,
                                       fontWeight: 700,
                                       cursor: "pointer",
+                                      transition: "all 0.15s ease",
                                     }}
                                     title="Kirim info poin via WhatsApp"
                                   >
                                     WA Poin
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteCustomer(cust.id, cust.name)}
+                                    className="ios-tap"
+                                    style={{
+                                      padding: "4px 8px",
+                                      borderRadius: 6,
+                                      border: "1px solid #fecdd3",
+                                      background: "#fff1f2",
+                                      color: "#e11d48",
+                                      fontSize: 10.5,
+                                      fontWeight: 700,
+                                      cursor: "pointer",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 3,
+                                      transition: "all 0.15s ease",
+                                    }}
+                                    title={`Hapus data pelanggan ${cust.name}`}
+                                  >
+                                    <span>🗑️</span> Hapus
                                   </button>
                                 </div>
                               </td>
@@ -1757,7 +1838,14 @@ export default function LaporanPage() {
                     {sortedCustomers.map((cust, idx) => {
                       const medal = idx === 0 ? "🥇 Juara 1" : idx === 1 ? "🥈 Juara 2" : idx === 2 ? "🥉 Juara 3" : `Peringkat #${idx + 1}`;
                       return (
-                        <div key={cust.id} className="kp-card" style={{ padding: "12px 14px" }}>
+                        <div
+                          key={cust.id}
+                          className="kp-card"
+                          style={{
+                            padding: "12px 14px",
+                            transition: "all 0.2s ease",
+                          }}
+                        >
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                             <span style={{ fontSize: 11, fontWeight: 800, color: "#b45309" }}>{medal}</span>
                             <span
@@ -1800,6 +1888,7 @@ export default function LaporanPage() {
                                 setPointsToRedeemInput(Math.min(cust.points, 10));
                               }}
                               disabled={cust.points < 10}
+                              className="ios-tap"
                               style={{
                                 flex: 1,
                                 padding: "6px 0",
@@ -1810,6 +1899,7 @@ export default function LaporanPage() {
                                 fontSize: 11,
                                 fontWeight: 700,
                                 cursor: cust.points >= 10 ? "pointer" : "not-allowed",
+                                transition: "all 0.15s ease",
                               }}
                             >
                               🎁 Tukar Poin
@@ -1817,6 +1907,7 @@ export default function LaporanPage() {
                             <button
                               type="button"
                               onClick={() => handleSendWaPoints(cust)}
+                              className="ios-tap"
                               style={{
                                 flex: 1,
                                 padding: "6px 0",
@@ -1827,9 +1918,32 @@ export default function LaporanPage() {
                                 fontSize: 11,
                                 fontWeight: 700,
                                 cursor: "pointer",
+                                transition: "all 0.15s ease",
                               }}
                             >
                               Kirim WA
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCustomer(cust.id, cust.name)}
+                              className="ios-tap"
+                              style={{
+                                padding: "6px 12px",
+                                borderRadius: 6,
+                                border: "1px solid #fecdd3",
+                                background: "#fff1f2",
+                                color: "#e11d48",
+                                fontSize: 11,
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 4,
+                                transition: "all 0.15s ease",
+                              }}
+                              title={`Hapus ${cust.name}`}
+                            >
+                              <span>🗑️</span> Hapus
                             </button>
                           </div>
                         </div>
@@ -1858,8 +1972,8 @@ export default function LaporanPage() {
 
       {/* Modal Tambah Pelanggan Baru */}
       {showAddCustomerModal && (
-        <div className="kp-modal-overlay">
-          <div className="kp-modal" style={{ maxWidth: 400 }}>
+        <div className="kp-modal-overlay animate-fadeIn">
+          <div className="kp-modal animate-scaleUp" style={{ maxWidth: 400 }}>
             <div className="kp-modal-header" style={{ background: "linear-gradient(135deg, #b45309 0%, #92400e 100%)" }}>
               <div>
                 <div style={{ fontSize: 10, fontWeight: 800, color: "#fde68a", textTransform: "uppercase" }}>
@@ -1903,7 +2017,7 @@ export default function LaporanPage() {
                 <button
                   type="button"
                   onClick={() => setShowAddCustomerModal(false)}
-                  className="kp-btn-secondary"
+                  className="kp-btn-secondary ios-tap"
                   style={{ flex: 1, justifyContent: "center" }}
                 >
                   Batal
@@ -1911,7 +2025,7 @@ export default function LaporanPage() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="kp-btn-primary"
+                  className="kp-btn-primary ios-tap"
                   style={{ flex: 1, justifyContent: "center", background: "#b45309" }}
                 >
                   {isSubmitting ? "Menyimpan..." : "Simpan Pelanggan"}
@@ -1924,8 +2038,8 @@ export default function LaporanPage() {
 
       {/* Modal Tukar Poin / Klaim Hadiah */}
       {selectedCustomerForRedeem && (
-        <div className="kp-modal-overlay">
-          <div className="kp-modal" style={{ maxWidth: 420 }}>
+        <div className="kp-modal-overlay animate-fadeIn">
+          <div className="kp-modal animate-scaleUp" style={{ maxWidth: 420 }}>
             <div className="kp-modal-header" style={{ background: "linear-gradient(135deg, #15803d 0%, #166534 100%)" }}>
               <div>
                 <div style={{ fontSize: 10, fontWeight: 800, color: "#86efac", textTransform: "uppercase" }}>
@@ -1958,6 +2072,7 @@ export default function LaporanPage() {
                           key={pts}
                           type="button"
                           onClick={() => setPointsToRedeemInput(pts)}
+                          className="ios-tap"
                           style={{
                             padding: "8px 6px",
                             borderRadius: 8,
@@ -1968,6 +2083,7 @@ export default function LaporanPage() {
                             color: isSel ? "#ffffff" : "#15803d",
                             border: `1.5px solid ${isSel ? "#15803d" : "#86efac"}`,
                             textAlign: "center",
+                            transition: "all 0.15s ease",
                           }}
                         >
                           {pts} Poin
@@ -1979,8 +2095,9 @@ export default function LaporanPage() {
 
                   <input
                     type="number"
-                    min={1}
-                    max={selectedCustomerForRedeem.points}
+                    min={10}
+                    step={10}
+                    max={Math.floor(selectedCustomerForRedeem.points / 10) * 10}
                     value={pointsToRedeemInput}
                     onChange={(e) => setPointsToRedeemInput(parseInt(e.target.value, 10) || 0)}
                     className="kp-input"
@@ -1988,6 +2105,11 @@ export default function LaporanPage() {
                   />
                   <div style={{ fontSize: 10.5, color: "#166534", marginTop: 4, textAlign: "center", fontWeight: 700 }}>
                     Setara Diskon Belanja / Nilai Hadiah THR: {formatRupiah(Math.floor(pointsToRedeemInput / 10) * 5000)}
+                    {pointsToRedeemInput % 10 !== 0 && (
+                      <span style={{ color: "#dc2626", display: "block", marginTop: 3, fontWeight: 800 }}>
+                        ⚠️ Jumlah penukaran harus kelipatan 10 poin
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1995,15 +2117,20 @@ export default function LaporanPage() {
                 <button
                   type="button"
                   onClick={() => setSelectedCustomerForRedeem(null)}
-                  className="kp-btn-secondary"
+                  className="kp-btn-secondary ios-tap"
                   style={{ flex: 1, justifyContent: "center" }}
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting || pointsToRedeemInput <= 0}
-                  className="kp-btn-primary"
+                  disabled={
+                    isSubmitting ||
+                    pointsToRedeemInput < 10 ||
+                    pointsToRedeemInput % 10 !== 0 ||
+                    pointsToRedeemInput > selectedCustomerForRedeem.points
+                  }
+                  className="kp-btn-primary ios-tap"
                   style={{ flex: 1, justifyContent: "center", background: "#15803d" }}
                 >
                   {isSubmitting ? "Memproses..." : "Konfirmasi Tukar"}
