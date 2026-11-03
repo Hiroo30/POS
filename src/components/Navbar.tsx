@@ -38,7 +38,7 @@ const navItems = [
     iconName: "menu_book",
   },
   {
-    label: "Laporan Omzet",
+    label: "Laporan & Poin",
     shortLabel: "Laporan",
     href: "/laporan",
     iconName: "query_stats",

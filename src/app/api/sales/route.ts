@@ -36,6 +36,7 @@ export async function POST(request: Request) {
       cashierName: body.cashierName,
       notes: body.notes,
       dueDate: body.dueDate,
+      pointsRedeemed: body.pointsRedeemed !== undefined ? Number(body.pointsRedeemed) : undefined,
     }, deviceId);
 
     return NextResponse.json({

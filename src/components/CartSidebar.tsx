@@ -96,6 +96,11 @@ export default function CartSidebar({
                   </div>
                   <div className="kp-cart-item-price">
                     {new Intl.NumberFormat("id-ID").format(item.pricePerUnit)} × {item.quantity} {unitLabel}
+                    {item.unitUsed === "PACK" && item.product.hasMultiUnit && item.product.packConversion ? (
+                      <span style={{display:"block", fontSize:10, color:"#16a34a", fontWeight:700, marginTop:1}}>
+                        ({item.quantity * item.product.packConversion} {item.product.baseUnit})
+                      </span>
+                    ) : null}
                   </div>
                 </div>
 

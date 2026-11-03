@@ -78,8 +78,17 @@ export default function ProductFormModal({
     setCostPrice(val);
     const num = parseFloat(val);
     const conv = parseFloat(packConversion);
-    if (hasMultiUnit && num && conv && !costPricePack) {
-      setCostPricePack((num * conv).toString());
+    if (hasMultiUnit && num && conv) {
+      setCostPricePack(Math.round(num * conv).toString());
+    }
+  };
+
+  const handleCostPricePackChange = (val: string) => {
+    setCostPricePack(val);
+    const num = parseFloat(val);
+    const conv = parseFloat(packConversion);
+    if (hasMultiUnit && num && conv && conv > 0) {
+      setCostPrice(Math.round(num / conv).toString());
     }
   };
 
@@ -87,9 +96,13 @@ export default function ProductFormModal({
     setSellPrice(val);
     const num = parseFloat(val);
     const conv = parseFloat(packConversion);
-    if (hasMultiUnit && num && conv && !sellPricePack) {
-      setSellPricePack((num * conv).toString());
+    if (hasMultiUnit && num && conv && (!sellPricePack || parseFloat(sellPricePack) <= 0)) {
+      setSellPricePack(Math.round(num * conv).toString());
     }
+  };
+
+  const handleSellPricePackChange = (val: string) => {
+    setSellPricePack(val);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -279,7 +292,7 @@ export default function ProductFormModal({
               {hasMultiUnit && (
                 <div style={{marginTop:6}}>
                   <label className="kp-label">Modal / {packUnit} (Rp)</label>
-                  <input type="number" value={costPricePack} onChange={(e) => setCostPricePack(e.target.value)} placeholder="112000" className="kp-input" />
+                  <input type="number" value={costPricePack} onChange={(e) => handleCostPricePackChange(e.target.value)} placeholder="112000" className="kp-input" />
                 </div>
               )}
             </div>
@@ -289,7 +302,7 @@ export default function ProductFormModal({
               {hasMultiUnit && (
                 <div style={{marginTop:6}}>
                   <label className="kp-label">Jual / {packUnit} (Rp)</label>
-                  <input type="number" value={sellPricePack} onChange={(e) => setSellPricePack(e.target.value)} placeholder="125000" className="kp-input" style={{borderColor:"#16a34a"}} />
+                  <input type="number" value={sellPricePack} onChange={(e) => handleSellPricePackChange(e.target.value)} placeholder="125000" className="kp-input" style={{borderColor:"#16a34a"}} />
                 </div>
               )}
             </div>
@@ -300,10 +313,41 @@ export default function ProductFormModal({
             <div>
               <label className="kp-label">Stok Sekarang ({baseUnit})</label>
               <input type="number" value={stockInBase} onChange={(e) => setStockInBase(e.target.value)} className="kp-input" />
+              {hasMultiUnit && (
+                <div style={{marginTop:6}}>
+                  <div style={{fontSize:11, color:"#16a34a", fontWeight:700}}>
+                    ≈ {Math.floor((parseFloat(stockInBase) || 0) / (parseFloat(packConversion) || 1))} {packUnit} + {((parseFloat(stockInBase) || 0) % (parseFloat(packConversion) || 1))} {baseUnit}
+                  </div>
+                  <div style={{display:"flex", gap:4, marginTop:4, flexWrap:"wrap"}}>
+                    {[1, 2, 5, 10].map((numPack) => (
+                      <button
+                        key={numPack}
+                        type="button"
+                        onClick={() => {
+                          const conv = parseFloat(packConversion) || 1;
+                          const cur = parseFloat(stockInBase) || 0;
+                          setStockInBase((cur + numPack * conv).toString());
+                        }}
+                        style={{
+                          background:"#f0fdf4", border:"1px solid #bbf7d0", color:"#16a34a",
+                          borderRadius:4, fontSize:10, fontWeight:700, padding:"2px 6px", cursor:"pointer"
+                        }}
+                      >
+                        +{numPack} {packUnit} (+{numPack * (parseFloat(packConversion) || 1)} {baseUnit})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="kp-label">Batas Minimum ({baseUnit})</label>
               <input type="number" value={minStockInBase} onChange={(e) => setMinStockInBase(e.target.value)} className="kp-input" />
+              {hasMultiUnit && (
+                <div style={{fontSize:10.5, color:"#64748b", marginTop:4}}>
+                  ≈ {Math.ceil((parseFloat(minStockInBase) || 0) / (parseFloat(packConversion) || 1))} {packUnit}
+                </div>
+              )}
             </div>
           </div>
 

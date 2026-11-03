@@ -148,14 +148,23 @@ export default function MaintenancePage() {
     );
     if (!confirmReset) return;
 
+    const adminPin = window.prompt(
+      "Masukkan PIN Otorisasi Admin untuk konfirmasi reset database (Default: 1234):"
+    );
+    if (!adminPin) return;
+
     setIsProcessing(true);
     setStatusMessage(null);
 
     try {
       const res = await fetch(`/api/maintenance?deviceId=${encodeURIComponent(deviceId)}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-device-id": deviceId },
-        body: JSON.stringify({ action: "reset" }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-device-id": deviceId,
+          "x-admin-pin": adminPin.trim(),
+        },
+        body: JSON.stringify({ action: "reset", adminPin: adminPin.trim() }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {

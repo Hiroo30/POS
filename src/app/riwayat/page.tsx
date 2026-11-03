@@ -200,6 +200,8 @@ export default function RiwayatPage() {
             `Kembalian     : ${formatRupiah(sale.changeAmount)}`,
           ]
         : []),
+      ...(sale.pointsEarned ? [`⭐ Poin Diperoleh: +${sale.pointsEarned} Poin`] : []),
+      ...(sale.pointsRedeemed ? [`🎁 Poin Ditukar  : -${sale.pointsRedeemed} Poin`] : []),
       `================================`,
       settings.receiptFooter || `Terima kasih telah berbelanja di *${settings.storeName}*!`,
       `Alamat & WA: ${settings.storePhone}`,
@@ -585,10 +587,20 @@ export default function RiwayatPage() {
                               </span>
                             </div>
 
-                            <div className="flex items-center gap-2 mt-1.5">
+                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                               <span className="text-xs font-bold text-slate-800">
                                 👤 {sale.customerName || "Pelanggan Umum"}
                               </span>
+                              {sale.pointsEarned ? (
+                                <span className="text-[10px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-md">
+                                  ⭐ +{sale.pointsEarned} Poin
+                                </span>
+                              ) : null}
+                              {sale.pointsRedeemed ? (
+                                <span className="text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-md">
+                                  🎁 -{sale.pointsRedeemed} Poin
+                                </span>
+                              ) : null}
                               <span className="text-slate-300">•</span>
                               <span className="text-xs text-slate-500 truncate">{summaryItems}</span>
                             </div>
@@ -781,6 +793,22 @@ export default function RiwayatPage() {
                             <div className="font-bold">STATUS: DICATAT DI BUKU KASBON</div>
                             <div>Nama: {selectedSale.customerName || "Pelanggan"}</div>
                             {selectedSale.notes && <div>Catatan: {selectedSale.notes}</div>}
+                          </div>
+                        )}
+                        {Boolean(selectedSale.pointsEarned || selectedSale.pointsRedeemed) && (
+                          <div className="p-2 mt-1.5 rounded-lg bg-emerald-50/80 border border-emerald-200 text-emerald-900 text-[10.5px] space-y-0.5">
+                            {selectedSale.pointsEarned ? (
+                              <div className="flex justify-between font-bold">
+                                <span>⭐ Poin Diperoleh:</span>
+                                <span>+{selectedSale.pointsEarned} Poin</span>
+                              </div>
+                            ) : null}
+                            {selectedSale.pointsRedeemed ? (
+                              <div className="flex justify-between font-semibold text-emerald-700">
+                                <span>🎁 Poin Ditukar (Diskon):</span>
+                                <span>-{selectedSale.pointsRedeemed} Poin</span>
+                              </div>
+                            ) : null}
                           </div>
                         )}
                       </div>

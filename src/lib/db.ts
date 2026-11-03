@@ -10,6 +10,9 @@ import {
   KasbonRecord,
   PaymentMethod,
   CartItem,
+  Customer,
+  StoreExpense,
+  ExpenseCategory,
 } from "./types";
 import { INITIAL_PRODUCTS, INITIAL_KASBON } from "./seedData";
 
@@ -21,6 +24,8 @@ export interface DatabaseSchema {
   transactions: Transaction[];
   sales: SaleTransaction[];
   kasbon: KasbonRecord[];
+  customers?: Customer[];
+  expenses?: StoreExpense[];
   lastBackupDate?: string;
 }
 
@@ -115,6 +120,72 @@ function createInitialState(): DatabaseSchema {
     transactions: [],
     sales: [],
     kasbon: [],
+    customers: [
+      {
+        id: "cust-1",
+        name: "Bu Siti Warung",
+        phone: "081234567890",
+        points: 48,
+        totalSpent: 480000,
+        visitCount: 6,
+        notes: "Langganan setia RT 02",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      {
+        id: "cust-2",
+        name: "Pak RT Bambang",
+        phone: "085712345678",
+        points: 75,
+        totalSpent: 750000,
+        visitCount: 11,
+        notes: "Warga RT 03 / RW 02",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      {
+        id: "cust-3",
+        name: "Mbak Rina Salon",
+        phone: "081398765432",
+        points: 25,
+        totalSpent: 250000,
+        visitCount: 3,
+        notes: "Ruko Blok C-2",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      {
+        id: "cust-4",
+        name: "Pak Haji Slamet",
+        phone: "081122334455",
+        points: 92,
+        totalSpent: 920000,
+        visitCount: 14,
+        notes: "Langganan rokok & sembako",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ],
+    expenses: [
+      {
+        id: "exp-seed-1",
+        category: "kresek",
+        description: "Beli kantong kresek putih 24x35 (2 pack)",
+        amount: 24000,
+        paidFromDrawer: true,
+        cashierName: "Kasir Dewi",
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: "exp-seed-2",
+        category: "kebersihan",
+        description: "Iuran sampah dan keamanan RT bulanan",
+        amount: 35000,
+        paidFromDrawer: true,
+        cashierName: "Kasir Dewi",
+        createdAt: new Date().toISOString(),
+      },
+    ],
     lastBackupDate: new Date().toISOString(),
   };
 }
@@ -167,6 +238,8 @@ function readLocalDb(deviceId: string): DatabaseSchema {
     parsed.transactions = cleanOrphanTransactions(parsed.transactions || [], parsed.products);
     if (!parsed.sales) parsed.sales = [];
     if (!parsed.kasbon) parsed.kasbon = [];
+    if (!parsed.customers) parsed.customers = createInitialState().customers;
+    if (!parsed.expenses) parsed.expenses = createInitialState().expenses;
     memDbByDevice[normId] = parsed;
     return parsed;
   } catch {
@@ -259,20 +332,27 @@ export async function getDbState(deviceId?: string): Promise<DatabaseSchema> {
       const tKey = `sembako:transactions:${normId}`;
       const sKey = `sembako:sales:${normId}`;
       const kKey = `sembako:kasbon:${normId}`;
+      const cKey = `sembako:customers:${normId}`;
+      const eKey = `sembako:expenses:${normId}`;
 
-      const [products, transactions, sales, kasbon] = await Promise.all([
+      const [products, transactions, sales, kasbon, customers, expenses] = await Promise.all([
         redis.get<Product[]>(pKey),
         redis.get<Transaction[]>(tKey),
         redis.get<SaleTransaction[]>(sKey),
         redis.get<KasbonRecord[]>(kKey),
+        redis.get<Customer[]>(cKey),
+        redis.get<StoreExpense[]>(eKey),
       ]);
       if (products !== null && products !== undefined) {
         const cleanedProducts = cleanMockSeedProducts(products);
+        const initial = createInitialState();
         return {
           products: cleanedProducts,
           transactions: cleanOrphanTransactions(transactions || [], cleanedProducts),
           sales: sales || [],
           kasbon: kasbon || [],
+          customers: customers && Array.isArray(customers) ? customers : initial.customers,
+          expenses: expenses && Array.isArray(expenses) ? expenses : initial.expenses,
           lastBackupDate: new Date().toISOString(),
         };
       } else {
@@ -283,6 +363,8 @@ export async function getDbState(deviceId?: string): Promise<DatabaseSchema> {
           redis.set(tKey, initial.transactions),
           redis.set(sKey, initial.sales),
           redis.set(kKey, initial.kasbon),
+          redis.set(cKey, initial.customers || []),
+          redis.set(eKey, initial.expenses || []),
         ]);
         return initial;
       }
@@ -307,12 +389,16 @@ export async function saveDbState(data: DatabaseSchema, deviceId?: string): Prom
       const tKey = `sembako:transactions:${normId}`;
       const sKey = `sembako:sales:${normId}`;
       const kKey = `sembako:kasbon:${normId}`;
+      const cKey = `sembako:customers:${normId}`;
+      const eKey = `sembako:expenses:${normId}`;
 
       await Promise.all([
         redis.set(pKey, data.products),
         redis.set(tKey, data.transactions || []),
         redis.set(sKey, data.sales || []),
         redis.set(kKey, data.kasbon || []),
+        redis.set(cKey, data.customers || []),
+        redis.set(eKey, data.expenses || []),
       ]);
       // Also update local mem/file for dev offline backup
       writeLocalDb(data, normId);
@@ -493,6 +579,7 @@ export interface CreateSaleInput {
   cashierName?: string;
   notes?: string;
   dueDate?: string; // Untuk Kasbon
+  pointsRedeemed?: number;
 }
 
 export async function processSale(
@@ -601,17 +688,24 @@ export async function processSale(
     };
   });
 
-  const profit = totalAmount - totalCost;
+  const pointsRedeemed = Math.max(0, Number(input.pointsRedeemed) || 0);
+  // 10 poin = Diskon Rp 5.000
+  const pointsDiscount = pointsRedeemed > 0 ? Math.floor(pointsRedeemed / 10) * 5000 : 0;
+  const finalTotalAmount = Math.max(0, totalAmount - pointsDiscount);
+  const profit = finalTotalAmount - totalCost;
   const changeAmount =
     input.paymentMethod === "KASBON"
       ? 0
-      : Math.max(0, input.amountPaid - totalAmount);
+      : Math.max(0, input.amountPaid - finalTotalAmount);
+
+  // Hitung poin loyalitas pelanggan didapat dari total belanja bersih (1 poin per Rp 10.000 belanja)
+  const pointsEarned = Math.floor(finalTotalAmount / 10000);
 
   const sale: SaleTransaction = {
     id: saleId,
     receiptNo,
     items: saleItems,
-    totalAmount,
+    totalAmount: finalTotalAmount,
     totalCost,
     profit,
     paymentMethod: input.paymentMethod,
@@ -622,8 +716,40 @@ export async function processSale(
       (input.paymentMethod === "KASBON" ? "Pelanggan Bon" : "Pelanggan Umum"),
     cashierName: input.cashierName || "Kasir Dewi",
     notes: input.notes,
+    pointsEarned,
+    pointsRedeemed: pointsRedeemed > 0 ? pointsRedeemed : undefined,
     createdAt: now.toISOString(),
   };
+
+  // Update akumulasi poin & riwayat belanja pelanggan
+  if (!db.customers) db.customers = [];
+  const custName = input.customerName?.trim();
+  if (custName && custName !== "Walk-in (Umum)" && custName !== "Pelanggan Umum") {
+    const existingIndex = db.customers.findIndex(
+      (c) => c.name.toLowerCase() === custName.toLowerCase() || (c.id && c.id === (input as any).customerId)
+    );
+    if (existingIndex !== -1) {
+      const cust = db.customers[existingIndex];
+      cust.points = Math.max(0, (cust.points || 0) + pointsEarned - pointsRedeemed);
+      cust.totalSpent = (cust.totalSpent || 0) + finalTotalAmount;
+      cust.visitCount = (cust.visitCount || 0) + 1;
+      cust.updatedAt = now.toISOString();
+      sale.customerId = cust.id;
+    } else {
+      const newCust: Customer = {
+        id: `cust-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        name: custName,
+        phone: (input as any).phone || "",
+        points: Math.max(0, pointsEarned - pointsRedeemed),
+        totalSpent: finalTotalAmount,
+        visitCount: 1,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      };
+      db.customers.push(newCust);
+      sale.customerId = newCust.id;
+    }
+  }
 
   let kasbonRecord: KasbonRecord | undefined;
   if (input.paymentMethod === "KASBON") {
@@ -638,9 +764,9 @@ export async function processSale(
       saleId: sale.id,
       customerName: input.customerName?.trim() || "Pelanggan Bon",
       itemsSummary: summaryStr,
-      amount: totalAmount,
+      amount: finalTotalAmount,
       paidAmount: 0,
-      remainingAmount: totalAmount,
+      remainingAmount: finalTotalAmount,
       status: "BELUM_LUNAS",
       dueDate:
         input.dueDate ||
@@ -681,9 +807,13 @@ export async function deleteSale(
   const index = db.sales.findIndex((s) => s.id === id);
   if (index === -1) return false;
   const sale = db.sales[index];
+  const now = new Date();
 
-  // Kembalikan stok produk jika diminta
+  // Kembalikan stok produk jika diminta & catat mutasi kompensasi masuk
   if (restoreStock && sale.items && db.products) {
+    if (!db.transactions) db.transactions = [];
+    const compensationTransactions: Transaction[] = [];
+
     for (const item of sale.items) {
       const prodIndex = db.products.findIndex((p) => p.id === item.productId);
       if (prodIndex !== -1) {
@@ -692,9 +822,50 @@ export async function deleteSale(
           item.unitUsed === "PACK" && prod.packConversion
             ? item.quantity * prod.packConversion
             : item.quantity;
-        prod.stockInBase += baseQty;
-        prod.updatedAt = new Date().toISOString();
+        const stockBefore = prod.stockInBase;
+        const stockAfter = stockBefore + baseQty;
+        prod.stockInBase = stockAfter;
+        prod.updatedAt = now.toISOString();
+
+        compensationTransactions.push({
+          id: `tx-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+          productId: prod.id,
+          productName: prod.name,
+          type: "IN",
+          quantityInBase: baseQty,
+          unitUsed: item.unitUsed,
+          quantityInput: item.quantity,
+          pricePerUnit: item.pricePerUnit,
+          totalPrice: item.subtotal,
+          note: `Pembatalan Nota (${sale.receiptNo})${
+            sale.customerName ? ` - ${sale.customerName}` : ""
+          }`,
+          stockBefore,
+          stockAfter,
+          createdAt: now.toISOString(),
+        });
       }
+    }
+
+    if (compensationTransactions.length > 0) {
+      db.transactions = [...compensationTransactions, ...db.transactions].slice(0, 1000);
+    }
+  }
+
+  // Rollback poin loyalitas & riwayat belanja pelanggan terkait
+  if (db.customers && (sale.customerId || sale.customerName)) {
+    const custIndex = db.customers.findIndex(
+      (c) =>
+        (sale.customerId && c.id === sale.customerId) ||
+        (sale.customerName && c.name.toLowerCase() === sale.customerName.toLowerCase())
+    );
+    if (custIndex !== -1) {
+      const cust = db.customers[custIndex];
+      const pointsToRollback = (sale.pointsEarned || 0) - (sale.pointsRedeemed || 0);
+      cust.points = Math.max(0, (cust.points || 0) - pointsToRollback);
+      cust.totalSpent = Math.max(0, (cust.totalSpent || 0) - (sale.totalAmount || 0));
+      cust.visitCount = Math.max(0, (cust.visitCount || 0) - 1);
+      cust.updatedAt = now.toISOString();
     }
   }
 
@@ -803,11 +974,10 @@ export async function deleteTransaction(
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 export async function getStoreSummary(deviceId?: string): Promise<StoreSummary> {
-  const [products, sales, kasbonList] = await Promise.all([
-    getProducts(deviceId),
-    getSales(500, deviceId),
-    getKasbonList(deviceId),
-  ]);
+  const db = await getDbState(deviceId);
+  const products = db.products || [];
+  const sales = db.sales || [];
+  const kasbonList = db.kasbon || [];
 
   let lowStockCount = 0;
   let outOfStockCount = 0;
@@ -849,6 +1019,30 @@ export async function getStoreSummary(deviceId?: string): Promise<StoreSummary> 
     }
   }
 
+  // Hitung total pengeluaran operasional hari ini & akumulatif
+  let todayExpenses = 0;
+  let totalExpenses = 0;
+  if (db.expenses) {
+    for (const exp of db.expenses) {
+      totalExpenses += exp.amount || 0;
+      if (exp.createdAt && exp.createdAt.startsWith(todayStr)) {
+        todayExpenses += exp.amount || 0;
+      }
+    }
+  }
+
+  // Hitung total pelanggan & total poin loyalitas aktif
+  let totalCustomers = 0;
+  let totalPointsActive = 0;
+  if (db.customers) {
+    totalCustomers = db.customers.length;
+    for (const c of db.customers) {
+      totalPointsActive += c.points || 0;
+    }
+  }
+
+  const todayNetProfit = todayProfit - todayExpenses;
+
   return {
     totalItems: products.length,
     lowStockCount,
@@ -859,7 +1053,151 @@ export async function getStoreSummary(deviceId?: string): Promise<StoreSummary> 
     todayProfit,
     todayOrderCount,
     totalKasbon,
+    todayExpenses,
+    todayNetProfit,
+    totalExpenses,
+    totalCustomers,
+    totalPointsActive,
   };
+}
+
+// ─── Expenses (Pengeluaran Operasional Toko) ──────────────────────────────────
+
+export async function getExpenses(limit = 100, deviceId?: string): Promise<StoreExpense[]> {
+  const db = await getDbState(deviceId);
+  return (db.expenses || []).slice(0, limit);
+}
+
+export async function recordExpense(
+  input: {
+    category: ExpenseCategory;
+    description: string;
+    amount: number;
+    paidFromDrawer?: boolean;
+    cashierName?: string;
+  },
+  deviceId?: string
+): Promise<StoreExpense> {
+  const db = await getDbState(deviceId);
+  const newExp: StoreExpense = {
+    id: `exp-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    category: input.category,
+    description: input.description.trim(),
+    amount: Math.max(0, Number(input.amount) || 0),
+    paidFromDrawer: Boolean(input.paidFromDrawer),
+    cashierName: input.cashierName || "Kasir Dewi",
+    createdAt: new Date().toISOString(),
+  };
+
+  if (!db.expenses) db.expenses = [];
+  db.expenses.unshift(newExp);
+  await saveDbState(db, deviceId);
+  return newExp;
+}
+
+export async function deleteExpense(id: string, deviceId?: string): Promise<boolean> {
+  const db = await getDbState(deviceId);
+  if (!db.expenses) return false;
+  const initialLen = db.expenses.length;
+  db.expenses = db.expenses.filter((e) => e.id !== id);
+  if (db.expenses.length !== initialLen) {
+    await saveDbState(db, deviceId);
+    return true;
+  }
+  return false;
+}
+
+// ─── Customers & Loyalty Points ──────────────────────────────────────────────
+
+export async function getCustomers(limit = 100, deviceId?: string): Promise<Customer[]> {
+  const db = await getDbState(deviceId);
+  const list = db.customers || [];
+  return [...list].sort((a, b) => (b.points || 0) - (a.points || 0)).slice(0, limit);
+}
+
+export async function saveCustomer(
+  input: Partial<Customer> & { name: string },
+  deviceId?: string
+): Promise<Customer> {
+  const db = await getDbState(deviceId);
+  if (!db.customers) db.customers = [];
+
+  const now = new Date().toISOString();
+  let customer: Customer;
+
+  if (input.id) {
+    const idx = db.customers.findIndex((c) => c.id === input.id);
+    if (idx !== -1) {
+      db.customers[idx] = {
+        ...db.customers[idx],
+        ...input,
+        updatedAt: now,
+      };
+      customer = db.customers[idx];
+    } else {
+      customer = {
+        id: input.id,
+        name: input.name.trim(),
+        phone: input.phone?.trim(),
+        points: input.points ?? 0,
+        totalSpent: input.totalSpent ?? 0,
+        visitCount: input.visitCount ?? 1,
+        notes: input.notes?.trim(),
+        createdAt: now,
+        updatedAt: now,
+      };
+      db.customers.push(customer);
+    }
+  } else {
+    customer = {
+      id: `cust-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      name: input.name.trim(),
+      phone: input.phone?.trim(),
+      points: input.points ?? 0,
+      totalSpent: input.totalSpent ?? 0,
+      visitCount: input.visitCount ?? 1,
+      notes: input.notes?.trim(),
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.customers.push(customer);
+  }
+
+  await saveDbState(db, deviceId);
+  return customer;
+}
+
+export async function deleteCustomer(id: string, deviceId?: string): Promise<boolean> {
+  const db = await getDbState(deviceId);
+  if (!db.customers) return false;
+  const initialLen = db.customers.length;
+  db.customers = db.customers.filter((c) => c.id !== id);
+  if (db.customers.length !== initialLen) {
+    await saveDbState(db, deviceId);
+    return true;
+  }
+  return false;
+}
+
+export async function redeemCustomerPoints(
+  customerId: string,
+  pointsToRedeem: number,
+  deviceId?: string
+): Promise<{ success: boolean; customer?: Customer; error?: string }> {
+  const db = await getDbState(deviceId);
+  if (!db.customers) return { success: false, error: "Pelanggan belum terdaftar" };
+  const idx = db.customers.findIndex((c) => c.id === customerId);
+  if (idx === -1) return { success: false, error: "Pelanggan tidak ditemukan" };
+
+  const customer = db.customers[idx];
+  if ((customer.points || 0) < pointsToRedeem) {
+    return { success: false, error: "Poin tidak mencukupi untuk ditukar" };
+  }
+
+  customer.points = (customer.points || 0) - pointsToRedeem;
+  customer.updatedAt = new Date().toISOString();
+  await saveDbState(db, deviceId);
+  return { success: true, customer };
 }
 
 // ─── Maintenance ──────────────────────────────────────────────────────────────

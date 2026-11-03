@@ -6,6 +6,16 @@ import {
   getDeviceIdFromRequest,
 } from "@/lib/db";
 
+// Helper untuk mencegah CSV Formula Injection (=, +, -, @, \t, \r)
+function sanitizeCsvCell(val: string | number | boolean | undefined | null): string {
+  if (val === null || val === undefined) return '""';
+  let str = String(val);
+  if (/^[=\+\-@\t\r]/.test(str)) {
+    str = "'" + str;
+  }
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
 export async function GET(request: Request) {
   try {
     const deviceId = getDeviceIdFromRequest(request);
@@ -35,13 +45,13 @@ export async function GET(request: Request) {
       const rows = raw.products.map((p) => {
         const asset = (p.stockInBase || 0) * (p.costPrice || 0);
         return [
-          `"${p.id}"`,
-          `"${p.name.replace(/"/g, '""')}"`,
-          `"${p.barcode || ""}"`,
-          `"${p.category}"`,
-          `"${p.baseUnit}"`,
-          `"${p.hasMultiUnit ? "Ya" : "Tidak"}"`,
-          `"${p.packUnit || ""}"`,
+          sanitizeCsvCell(p.id),
+          sanitizeCsvCell(p.name),
+          sanitizeCsvCell(p.barcode || ""),
+          sanitizeCsvCell(p.category),
+          sanitizeCsvCell(p.baseUnit),
+          sanitizeCsvCell(p.hasMultiUnit ? "Ya" : "Tidak"),
+          sanitizeCsvCell(p.packUnit || ""),
           p.packConversion || 1,
           p.stockInBase || 0,
           p.minStockInBase || 5,
@@ -83,6 +93,23 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     if (body.action === "reset") {
+      const authPin =
+        body.adminPin ||
+        request.headers.get("x-admin-pin") ||
+        new URL(request.url).searchParams.get("pin");
+      const requiredPin = process.env.ADMIN_PIN || "1234";
+
+      if (!authPin || String(authPin).trim() !== String(requiredPin).trim()) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "PIN Otorisasi Admin salah atau tidak disertakan. Aksi reset database ditolak demi keamanan.",
+          },
+          { status: 401 }
+        );
+      }
+
       await resetDatabaseToDefault(deviceId);
       return NextResponse.json({
         success: true,

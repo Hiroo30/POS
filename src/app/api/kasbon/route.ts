@@ -60,7 +60,15 @@ export async function PUT(request: Request) {
       );
     }
 
-    const updated = await payKasbon(body.id, Number(body.amount), deviceId);
+    const payAmount = Number(body.amount);
+    if (isNaN(payAmount) || payAmount <= 0) {
+      return NextResponse.json(
+        { success: false, error: "Jumlah pembayaran kasbon harus berupa angka lebih dari Rp 0" },
+        { status: 400 }
+      );
+    }
+
+    const updated = await payKasbon(body.id, payAmount, deviceId);
     if (!updated) {
       return NextResponse.json(
         { success: false, error: "Data kasbon tidak ditemukan" },

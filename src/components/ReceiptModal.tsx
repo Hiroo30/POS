@@ -34,6 +34,8 @@ export default function ReceiptModal({ sale, onClose }: Props) {
       ...(sale.paymentMethod === "TUNAI"
         ? [`Tunai: ${formatRupiah(sale.amountPaid)}`, `Kembalian: ${formatRupiah(sale.changeAmount)}`]
         : []),
+      ...(sale.pointsEarned ? [`⭐ Poin Didapat: +${sale.pointsEarned} Poin`] : []),
+      ...(sale.pointsRedeemed ? [`🎁 Poin Ditukar: -${sale.pointsRedeemed} Poin`] : []),
       `================================`,
       settings.receiptFooter || `Terima kasih telah berbelanja!`,
     ];
@@ -130,6 +132,23 @@ export default function ReceiptModal({ sale, onClose }: Props) {
             {sale.paymentMethod === "KASBON" && (
               <div style={{background:"#fef3c7", border:"1px solid #fde68a", borderRadius:6, padding:"6px 10px", marginTop:6, textAlign:"center", fontSize:10, fontWeight:700, color:"#92400e"}}>
                 ⚠ DICATAT KE BUKU KASBON
+              </div>
+            )}
+
+            {Boolean(sale.pointsEarned || sale.pointsRedeemed) && (
+              <div style={{ background: "#f0fdf4", border: "1px dashed #86efac", borderRadius: 6, padding: "6px 8px", marginTop: 8, fontSize: 10 }}>
+                {sale.pointsEarned ? (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 800, color: "#166534" }}>
+                    <span>⭐ Poin Diperoleh:</span>
+                    <span>+{sale.pointsEarned} Poin</span>
+                  </div>
+                ) : null}
+                {sale.pointsRedeemed ? (
+                  <div style={{ display: "flex", justifyContent: "space-between", color: "#15803d", marginTop: 2 }}>
+                    <span>🎁 Poin Ditukar (Diskon):</span>
+                    <span>-{sale.pointsRedeemed} Poin</span>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

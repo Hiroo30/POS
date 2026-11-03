@@ -2,14 +2,16 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
-import type { Product, CartItem, SaleTransaction } from "@/lib/types";
+import type { Product, CartItem, SaleTransaction, Customer } from "@/lib/types";
 import CategoryFilter from "@/components/CategoryFilter";
 import PosProductCard from "@/components/PosProductCard";
 import CartSidebar from "@/components/CartSidebar";
 import CheckoutModal from "@/components/CheckoutModal";
 import ReceiptModal from "@/components/ReceiptModal";
 import CashDrawerModal from "@/components/CashDrawerModal";
+import ExpenseModal from "@/components/ExpenseModal";
 import { deviceFetch, getDeviceId, getDeviceLabel } from "@/lib/device";
+import { playBeep, playAlertSound } from "@/lib/audio";
 
 interface SummaryData {
   totalItems: number;
@@ -20,6 +22,8 @@ interface SummaryData {
   todaySales: number;
   todayRevenue: number;
   todayProfit: number;
+  todayExpenses?: number;
+  todayNetProfit?: number;
 }
 
 function formatRupiah(n: number) {
@@ -32,6 +36,7 @@ export default function PosPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("semua");
   const [customers, setCustomers] = useState<string[]>(["Walk-in (Umum)"]);
+  const [customerRecords, setCustomerRecords] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<string>("Walk-in (Umum)");
   const [showAddCustomerModal, setShowAddCustomerModal] = useState<boolean>(false);
   const [newCustomerName, setNewCustomerName] = useState<string>("");
@@ -47,6 +52,7 @@ export default function PosPage() {
   const [deviceLabel, setDeviceLabel] = useState("");
   const [cashDrawerAmount, setCashDrawerAmount] = useState<number>(0);
   const [showCashDrawerModal, setShowCashDrawerModal] = useState<boolean>(false);
+  const [showExpenseModal, setShowExpenseModal] = useState<boolean>(false);
 
   // Load per-device cart, customers & cash drawer on mount
   useEffect(() => {
@@ -155,20 +161,37 @@ export default function PosPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [prodRes, sumRes] = await Promise.all([
+      const [prodRes, sumRes, custRes] = await Promise.all([
         deviceFetch("/api/products"),
         deviceFetch("/api/summary"),
+        deviceFetch("/api/customers"),
       ]);
       const prodData = await prodRes.json();
       const sumData = await sumRes.json();
+      const custData = await custRes.json();
       if (prodData.success) setProducts(prodData.data);
       if (sumData.success) setSummary(sumData.data);
+      if (custData.success && Array.isArray(custData.data)) {
+        setCustomerRecords(custData.data);
+        setCustomers((prev) => {
+          const names = new Set(prev);
+          custData.data.forEach((c: Customer) => names.add(c.name));
+          return Array.from(names);
+        });
+      }
     } catch (err) {
       console.error("Gagal memuat data", err);
     } finally {
       setIsLoading(false);
     }
   }, []);
+
+  const selectedCustomerRecord = useMemo(() => {
+    if (!selectedCustomer || selectedCustomer === "Walk-in (Umum)") return null;
+    return customerRecords.find(
+      (c) => c.name.toLowerCase() === selectedCustomer.toLowerCase()
+    );
+  }, [customerRecords, selectedCustomer]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -193,6 +216,33 @@ export default function PosPage() {
   }, [products]);
 
   const handleAddToCart = (product: Product, unitUsed: "BASE" | "PACK") => {
+    const conversion = product.hasMultiUnit && product.packConversion && product.packConversion > 1 ? product.packConversion : 1;
+    const addInBase = unitUsed === "PACK" ? conversion : 1;
+
+    // Check existing quantity in base units across all cart items for this product
+    const currentBaseInCart = cart
+      .filter((it) => it.product.id === product.id)
+      .reduce((sum, it) => {
+        const itemConv = it.product.hasMultiUnit && it.product.packConversion ? it.product.packConversion : 1;
+        return sum + (it.unitUsed === "PACK" ? it.quantity * itemConv : it.quantity);
+      }, 0);
+
+    if (currentBaseInCart + addInBase > product.stockInBase) {
+      playAlertSound();
+      const packUnitName = product.packUnit || "Dus";
+      if (unitUsed === "PACK") {
+        alert(
+          `Stok tidak mencukupi untuk 1 ${packUnitName}! Sisa stok fisik di toko adalah ${product.stockInBase} ${product.baseUnit} (butuh ${conversion} ${product.baseUnit}).`
+        );
+      } else {
+        alert(
+          `Stok tidak mencukupi! Tersedia ${product.stockInBase} ${product.baseUnit}, sudah ada ${currentBaseInCart} ${product.baseUnit} di keranjang.`
+        );
+      }
+      return;
+    }
+
+    playBeep();
     setCart((prev) => {
       const existingIndex = prev.findIndex(
         (it) => it.product.id === product.id && it.unitUsed === unitUsed
@@ -215,15 +265,34 @@ export default function PosPage() {
   const handleUpdateQuantity = (productId: string, unitUsed: "BASE" | "PACK", newQty: number) => {
     if (newQty <= 0) {
       setCart((prev) => prev.filter((it) => !(it.product.id === productId && it.unitUsed === unitUsed)));
-    } else {
-      setCart((prev) =>
-        prev.map((it) =>
-          it.product.id === productId && it.unitUsed === unitUsed
-            ? { ...it, quantity: newQty, subtotal: newQty * it.pricePerUnit }
-            : it
-        )
-      );
+      return;
     }
+
+    const item = cart.find((it) => it.product.id === productId && it.unitUsed === unitUsed);
+    if (item && newQty > item.quantity) {
+      const product = item.product;
+      const conversion = product.hasMultiUnit && product.packConversion ? product.packConversion : 1;
+      const otherItemsBase = cart
+        .filter((it) => it.product.id === productId && !(it.unitUsed === unitUsed))
+        .reduce((sum, it) => {
+          const itemConv = it.product.hasMultiUnit && it.product.packConversion ? it.product.packConversion : 1;
+          return sum + (it.unitUsed === "PACK" ? it.quantity * itemConv : it.quantity);
+        }, 0);
+      const targetBase = otherItemsBase + (unitUsed === "PACK" ? newQty * conversion : newQty);
+      if (targetBase > product.stockInBase) {
+        playAlertSound();
+        alert(`Stok fisik ${product.name} tidak mencukupi untuk menambah item ini! (Tersedia ${product.stockInBase} ${product.baseUnit})`);
+        return;
+      }
+    }
+
+    setCart((prev) =>
+      prev.map((it) =>
+        it.product.id === productId && it.unitUsed === unitUsed
+          ? { ...it, quantity: newQty, subtotal: newQty * it.pricePerUnit }
+          : it
+      )
+    );
   };
 
   const totalAmount = cart.reduce((s, it) => s + it.subtotal, 0);
@@ -308,6 +377,21 @@ export default function PosPage() {
             </span>
           </button>
 
+          {/* Kas Keluar / Expense Pill */}
+          <button
+            type="button"
+            onClick={() => setShowExpenseModal(true)}
+            className="desktop-only flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-800 transition-all cursor-pointer shadow-2xs group"
+            title="Catat Arus Kas Keluar (Beli Kresek, Listrik, Sampah, Makan Penjaga)"
+          >
+            <span className="material-symbols-outlined text-[15px] text-orange-600">
+              payments
+            </span>
+            <span className="text-xs font-bold text-orange-700">
+              - Kas Keluar
+            </span>
+          </button>
+
           {/* Time & Shift */}
           <div className="desktop-only" style={{fontSize: 11, color: "#64748b", fontWeight: 600}}>
             {timeStr} • Shift Pagi
@@ -364,18 +448,26 @@ export default function PosPage() {
               />
             </div>
 
-            {/* Mobile Cash Drawer Bar */}
-            <div className="mobile-only flex items-center justify-between mb-3 px-0.5">
+            {/* Mobile Cash Drawer & Expense Bar */}
+            <div className="mobile-only flex items-center justify-between mb-3 px-0.5 gap-2">
               <button
                 type="button"
                 onClick={() => setShowCashDrawerModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold shadow-2xs cursor-pointer active:scale-95 transition-all"
+                className="flex-1 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold shadow-2xs cursor-pointer active:scale-95 transition-all"
               >
                 <span className="material-symbols-outlined text-[16px] text-emerald-700">payments</span>
-                <span>Uang Laci: <strong className="text-emerald-700">{formatRupiah(cashDrawerAmount)}</strong></span>
+                <span>Laci: <strong className="text-emerald-700">{formatRupiah(cashDrawerAmount)}</strong></span>
                 <span className="material-symbols-outlined text-[13px] text-emerald-600">edit</span>
               </button>
-              <span className="text-[11px] text-slate-500 font-medium">Shift 1 Pagi</span>
+              <button
+                type="button"
+                onClick={() => setShowExpenseModal(true)}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-orange-50 border border-orange-200 text-orange-800 text-xs font-bold shadow-2xs cursor-pointer active:scale-95 transition-all"
+              >
+                <span className="material-symbols-outlined text-[15px] text-orange-600">payments</span>
+                <span>- Keluar</span>
+              </button>
+              <span className="text-[11px] text-slate-500 font-medium">Shift 1</span>
             </div>
             {/* Top Metrics Ribbon (Stitch Design: 4 KPIs) */}
             <div className="grid-3" style={{marginBottom: 10, gap: 10}}>
@@ -481,6 +573,10 @@ export default function PosPage() {
               {customers.map((c) => {
                 const isSelected = selectedCustomer === c;
                 const isWalkIn = c === "Walk-in (Umum)";
+                const custRec = customerRecords.find(
+                  (cr) => cr.name.toLowerCase() === c.toLowerCase()
+                );
+                const pts = custRec?.points || 0;
                 return (
                   <div key={c} className="inline-flex items-center rounded-lg overflow-hidden shadow-2xs">
                     <button
@@ -500,7 +596,23 @@ export default function PosPage() {
                         borderBottomLeftRadius: 8,
                       }}
                     >
-                      {c}
+                      <span className="inline-flex items-center gap-1">
+                        <span>{c}</span>
+                        {pts > 0 && (
+                          <span
+                            style={{
+                              fontSize: 9.5,
+                              fontWeight: 800,
+                              background: isSelected ? "rgba(255,255,255,0.25)" : "#fef3c7",
+                              color: isSelected ? "#ffffff" : "#b45309",
+                              padding: "1px 5px",
+                              borderRadius: 5,
+                            }}
+                          >
+                            ⭐{pts}
+                          </span>
+                        )}
+                      </span>
                     </button>
                     {!isWalkIn && (
                       <button
@@ -530,6 +642,30 @@ export default function PosPage() {
                   </div>
                 );
               })}
+
+              {selectedCustomerRecord && selectedCustomerRecord.points > 0 && (
+                <span
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    color: "#166534",
+                    background: "#dcfce7",
+                    border: "1px solid #86efac",
+                    padding: "3px 8px",
+                    borderRadius: 8,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  ⭐ Saldo: <strong>{selectedCustomerRecord.points} Poin</strong>
+                  {selectedCustomerRecord.points >= 10 && (
+                    <span style={{ color: "#15803d" }}>
+                      (Diskon {formatRupiah(Math.floor(selectedCustomerRecord.points / 10) * 5000)})
+                    </span>
+                  )}
+                </span>
+              )}
 
               {/* + Tambah Pelanggan Button */}
               <button
@@ -781,6 +917,8 @@ export default function PosPage() {
         <CheckoutModal
           cart={cart}
           totalAmount={totalAmount}
+          initialCustomerName={selectedCustomer}
+          initialPoints={selectedCustomerRecord?.points || 0}
           onClose={() => setShowCheckout(false)}
           onSuccess={handleCheckoutSuccess}
         />
@@ -797,6 +935,17 @@ export default function PosPage() {
         currentAmount={cashDrawerAmount}
         onSave={handleSaveCashDrawer}
         deviceLabel={deviceLabel || "Kasir"}
+      />
+      <ExpenseModal
+        isOpen={showExpenseModal}
+        onClose={() => setShowExpenseModal(false)}
+        cashDrawerAmount={cashDrawerAmount}
+        onSuccess={(amountDeducted) => {
+          if (amountDeducted > 0) {
+            handleSaveCashDrawer(Math.max(0, cashDrawerAmount - amountDeducted));
+          }
+          loadData();
+        }}
       />
 
       {/* Modal Tambah Pelanggan Baru */}

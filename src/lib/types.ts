@@ -64,6 +64,37 @@ export interface Transaction {
 
 export type PaymentMethod = "TUNAI" | "QRIS" | "TRANSFER" | "KASBON";
 
+export interface Customer {
+  id: string;
+  name: string;
+  phone?: string;
+  points: number;
+  totalSpent: number;
+  visitCount: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ExpenseCategory =
+  | "kresek"
+  | "operasional"
+  | "kebersihan"
+  | "konsumsi"
+  | "transport"
+  | "perawatan"
+  | "lainnya";
+
+export interface StoreExpense {
+  id: string;
+  category: ExpenseCategory;
+  description: string;
+  amount: number;
+  paidFromDrawer: boolean;
+  cashierName?: string;
+  createdAt: string;
+}
+
 export interface CartItem {
   product: Product;
   quantity: number;
@@ -94,9 +125,23 @@ export interface SaleTransaction {
   amountPaid: number;
   changeAmount: number;
   customerName?: string;
+  customerId?: string;
+  pointsEarned?: number;
+  pointsRedeemed?: number;
   cashierName?: string;
   notes?: string;
   createdAt: string;
+}
+
+export interface CreateSaleInput {
+  items: CartItem[];
+  paymentMethod: PaymentMethod;
+  amountPaid: number;
+  customerName?: string;
+  cashierName?: string;
+  notes?: string;
+  dueDate?: string; // Untuk Kasbon
+  pointsRedeemed?: number;
 }
 
 export interface KasbonRecord {
@@ -125,6 +170,11 @@ export interface StoreSummary {
   todayProfit: number; // Laba kotor hari ini
   todayOrderCount: number; // Jumlah nota/transaksi hari ini
   totalKasbon: number; // Total piutang kasbon belum lunas
+  todayExpenses?: number; // Biaya operasional hari ini
+  todayNetProfit?: number; // Laba bersih riil toko hari ini (laba kotor - operasional)
+  totalExpenses?: number; // Total operasional akumulatif
+  totalCustomers?: number; // Jumlah pelanggan terdaftar
+  totalPointsActive?: number; // Total saldo poin pelanggan
 }
 
 export interface CategoryInfo {

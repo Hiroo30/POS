@@ -29,17 +29,34 @@ export default function PosProductCard({ product, onAddToCart, cartItems }: Prop
     ? `${product.packUnit ?? "Pak"}`
     : `${product.baseUnit}`;
 
+  const conversion = product.hasMultiUnit && product.packConversion ? product.packConversion : 1;
+  const packsAvailable = Math.floor(product.stockInBase / conversion);
+  const remainderBase = product.stockInBase % conversion;
+
   const isOutOfStock = product.stockInBase <= 0;
   const isLowStock = !isOutOfStock && product.stockInBase <= (product.minStockInBase ?? 5);
+  const isPackOutOfStock = selectedUnit === "PACK" && packsAvailable <= 0;
+  const isDisabled = isOutOfStock || (selectedUnit === "PACK" && isPackOutOfStock);
 
   let stockBadgeStyle = { background: "#dcfce7", color: "#15803d" };
   let stockLabel = `Stok: ${product.stockInBase} ${product.baseUnit}`;
+
   if (isOutOfStock) {
     stockBadgeStyle = { background: "#fee2e2", color: "#dc2626" };
     stockLabel = "Habis";
+  } else if (selectedUnit === "PACK" && product.hasMultiUnit) {
+    if (isPackOutOfStock) {
+      stockBadgeStyle = { background: "#fee2e2", color: "#dc2626" };
+      stockLabel = `Kurang 1 ${product.packUnit} (sisa ${product.stockInBase} ${product.baseUnit})`;
+    } else {
+      stockBadgeStyle = { background: "#dcfce7", color: "#15803d" };
+      stockLabel = `Stok: ${packsAvailable} ${product.packUnit}${remainderBase > 0 ? ` (+${remainderBase})` : ""}`;
+    }
   } else if (isLowStock) {
     stockBadgeStyle = { background: "#fef3c7", color: "#b45309" };
     stockLabel = `Sisa ${product.stockInBase} ${product.baseUnit}`;
+  } else if (product.hasMultiUnit && product.packConversion && product.packConversion > 1) {
+    stockLabel = `${product.stockInBase} ${product.baseUnit} (≈${packsAvailable} ${product.packUnit})`;
   }
 
   return (
@@ -158,7 +175,7 @@ export default function PosProductCard({ product, onAddToCart, cartItems }: Prop
               boxShadow: selectedUnit === "PACK" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
             }}
           >
-            {product.packUnit}
+            {product.packUnit} (×{product.packConversion})
           </button>
         </div>
       ) : (
@@ -167,7 +184,7 @@ export default function PosProductCard({ product, onAddToCart, cartItems }: Prop
 
       {/* Price & Add Button */}
       <div style={{marginTop: "auto"}}>
-        <div style={{display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8}}>
+        <div style={{display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 4}}>
           <span style={{fontSize: 15, fontWeight: 800, color: "#006c49"}}>
             {formatRupiah(price)}
           </span>
@@ -176,32 +193,62 @@ export default function PosProductCard({ product, onAddToCart, cartItems }: Prop
           </span>
         </div>
 
+        {/* Multi-unit conversion indicator */}
+        {product.hasMultiUnit && product.packUnit && product.packConversion && (
+          <div style={{
+            fontSize: 10,
+            color: selectedUnit === "PACK" ? "#16a34a" : "#64748b",
+            background: selectedUnit === "PACK" ? "#f0fdf4" : "#f8fafc",
+            padding: "2px 6px",
+            borderRadius: 5,
+            marginBottom: 8,
+            fontWeight: 600,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between"
+          }}>
+            {selectedUnit === "PACK" ? (
+              <>
+                <span>1 {product.packUnit} = {conversion} {product.baseUnit}</span>
+                <span style={{color: "#059669"}}>Rp {Math.round(price / conversion).toLocaleString("id-ID")}/{product.baseUnit}</span>
+              </>
+            ) : (
+              <>
+                <span>Grosir: {product.packUnit} (×{conversion})</span>
+                <span style={{color: "#0284c7"}}>{formatRupiah(product.sellPricePack ?? (product.sellPrice * conversion))}</span>
+              </>
+            )}
+          </div>
+        )}
+
         <button
           type="button"
-          disabled={isOutOfStock}
+          disabled={isDisabled}
           onClick={() => onAddToCart(product, selectedUnit)}
           style={{
             width: "100%",
             padding: "8px 0",
             borderRadius: 8,
             border: "none",
-            background: isOutOfStock ? "#e2e8f0" : "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-            color: isOutOfStock ? "#94a3b8" : "#ffffff",
+            background: isDisabled ? "#e2e8f0" : "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+            color: isDisabled ? "#94a3b8" : "#ffffff",
             fontSize: 12,
             fontWeight: 700,
-            cursor: isOutOfStock ? "not-allowed" : "pointer",
+            cursor: isDisabled ? "not-allowed" : "pointer",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             gap: 6,
-            boxShadow: isOutOfStock ? "none" : "0 2px 6px rgba(16,185,129,0.25)",
+            boxShadow: isDisabled ? "none" : "0 2px 6px rgba(16,185,129,0.25)",
             transition: "all 0.15s ease",
           }}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Tambah
+          {!isDisabled && (
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          )}
+          {isDisabled ? (isOutOfStock ? "Stok Habis" : `Stok ${product.packUnit || "Dus"} Kurang`) : "Tambah"}
         </button>
       </div>
     </div>

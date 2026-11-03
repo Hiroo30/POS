@@ -3,8 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   serverExternalPackages: ["@vercel/blob"],
-  cacheComponents: true,
-  partialPrefetching: true,
+  experimental: {
+    ppr: true,
+  },
   turbopack: {
     rules: {
       "*.css": {

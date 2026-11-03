@@ -160,8 +160,17 @@ export default function QuickStockModal({ product, mode, isOpen, onClose, onSucc
                 onChange={(e) => setQuantity(e.target.value)}
               />
               {mode !== "ADJUST" && totalBaseQty > 0 && isPack && (
-                <div style={{fontSize:11, color:"#16a34a", marginTop:4, fontWeight:600}}>
-                  = {totalBaseQty} {product.baseUnit} total
+                <div style={{background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, padding:"8px 12px", marginTop:8}}>
+                  <div style={{fontSize:12, fontWeight:700, color:"#16a34a", display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+                    <span>Konversi Otomatis ke Stok Eceran:</span>
+                    <span>+{totalBaseQty} {product.baseUnit}</span>
+                  </div>
+                  <div style={{fontSize:11, color:"#15803d", marginTop:4}}>
+                    Stok saat ini: {product.stockInBase} {product.baseUnit} → <strong>Setelah kulakan: {product.stockInBase + totalBaseQty} {product.baseUnit}</strong>
+                  </div>
+                  <div style={{fontSize:10.5, color:"#64748b", marginTop:2}}>
+                    (Setara dengan {Math.floor((product.stockInBase + totalBaseQty) / conversion)} {product.packUnit}{((product.stockInBase + totalBaseQty) % conversion) > 0 ? ` + ${((product.stockInBase + totalBaseQty) % conversion)} ${product.baseUnit}` : " (Pas)"})
+                  </div>
                 </div>
               )}
             </div>
@@ -206,6 +215,17 @@ export default function QuickStockModal({ product, mode, isOpen, onClose, onSucc
                       value={newCostPrice}
                       onChange={(e) => setNewCostPrice(e.target.value)}
                     />
+                    {parseFloat(newCostPrice) > 0 && (
+                      <div style={{fontSize:11, color:"#16a34a", fontWeight:600, marginTop:4}}>
+                        {isPack ? (
+                          <>≈ Rp {Math.round(parseFloat(newCostPrice) / conversion).toLocaleString("id-ID")} / {product.baseUnit} (modal eceran baru otomatis)</>
+                        ) : (
+                          product.hasMultiUnit && product.packUnit ? (
+                            <>≈ Rp {Math.round(parseFloat(newCostPrice) * conversion).toLocaleString("id-ID")} / {product.packUnit} (modal grosir baru)</>
+                          ) : null
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

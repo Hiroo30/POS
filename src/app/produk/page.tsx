@@ -595,6 +595,11 @@ export default function ProdukPage() {
                                   </span>
                                 )}
                               </div>
+                              {p.hasMultiUnit && p.packUnit && p.packConversion && p.packConversion > 1 && (
+                                <div className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">
+                                  ≈ {Math.floor(p.stockInBase / p.packConversion)} {p.packUnit} {p.stockInBase % p.packConversion > 0 ? `+ ${p.stockInBase % p.packConversion} ${p.baseUnit}` : "(Pas)"}
+                                </div>
+                              )}
                               {/* Stock Bar */}
                               <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
                                 <div
@@ -751,6 +756,11 @@ export default function ProdukPage() {
                                 ></span>
                                 Stok: {p.stockInBase} {p.baseUnit}
                               </span>
+                              {p.hasMultiUnit && p.packUnit && p.packConversion && p.packConversion > 1 && (
+                                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">
+                                  ≈ {Math.floor(p.stockInBase / p.packConversion)} {p.packUnit}{p.stockInBase % p.packConversion > 0 ? ` +${p.stockInBase % p.packConversion}` : ""}
+                                </span>
+                              )}
                               {marginPercent && (
                                 <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
                                   Margin +{marginPercent}%

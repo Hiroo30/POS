@@ -1,7 +1,7 @@
 "use client";
 
 import type { Product } from "@/lib/types";
-import { formatRupiah } from "@/lib/formatters";
+import { formatRupiah, formatMultiUnitBreakdown } from "@/lib/formatters";
 import CategoryIcon from "./CategoryIcon";
 
 interface Props {
@@ -49,25 +49,47 @@ export default function ProductCard({ product, onStockIn, onStockOut, onEdit, on
       </div>
 
       {/* Stock & Price info */}
-      <div style={{padding:"8px 12px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:6}}>
-        <div style={{background:"#f8fafc", borderRadius:6, padding:"6px 8px"}}>
-          <div style={{fontSize:10, color:"#64748b", fontWeight:600, marginBottom:2}}>STOK</div>
-          <div style={{fontSize:13, fontWeight:800, color: isOut ? "#dc2626" : isLow ? "#d97706" : "#16a34a"}}>
-            {product.stockInBase} {product.baseUnit}
-          </div>
-        </div>
-        <div style={{background:"#f8fafc", borderRadius:6, padding:"6px 8px"}}>
-          <div style={{fontSize:10, color:"#64748b", fontWeight:600, marginBottom:2}}>HARGA JUAL</div>
-          <div style={{fontSize:12, fontWeight:800, color:"#1e293b"}}>{formatRupiah(product.sellPrice)}</div>
-        </div>
-        {product.hasMultiUnit && product.packUnit && (
-          <div style={{background:"#f0fdf4", borderRadius:6, padding:"6px 8px", gridColumn:"1/-1"}}>
-            <div style={{fontSize:10, color:"#16a34a", fontWeight:600, marginBottom:1}}>
-              {product.packUnit} (×{product.packConversion}) = {formatRupiah(product.sellPricePack ?? product.sellPrice * (product.packConversion ?? 1))}
+      {(() => {
+        const hasPack = Boolean(product.hasMultiUnit && product.packUnit && product.packConversion && product.packConversion > 1);
+        const packBreakdown = hasPack ? formatMultiUnitBreakdown(product.stockInBase, product.baseUnit, product.packUnit, product.packConversion) : null;
+        const packSellPrice = product.sellPricePack ?? (product.packConversion ? product.sellPrice * product.packConversion : product.sellPrice);
+        const normalPackValue = (product.packConversion || 1) * product.sellPrice;
+        const packDiscount = normalPackValue > packSellPrice ? normalPackValue - packSellPrice : 0;
+
+        return (
+          <div style={{padding:"8px 12px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:6}}>
+            <div style={{background:"#f8fafc", borderRadius:6, padding:"6px 8px"}}>
+              <div style={{fontSize:10, color:"#64748b", fontWeight:600, marginBottom:2}}>STOK TOTAL</div>
+              <div style={{fontSize:13, fontWeight:800, color: isOut ? "#dc2626" : isLow ? "#d97706" : "#16a34a"}}>
+                {product.stockInBase} {product.baseUnit}
+              </div>
+              {packBreakdown && (
+                <div style={{fontSize:9.5, fontWeight:700, color:"#059669", marginTop:2}}>
+                  ≈ {packBreakdown.summary}
+                </div>
+              )}
             </div>
+            <div style={{background:"#f8fafc", borderRadius:6, padding:"6px 8px"}}>
+              <div style={{fontSize:10, color:"#64748b", fontWeight:600, marginBottom:2}}>HARGA ECERAN</div>
+              <div style={{fontSize:12, fontWeight:800, color:"#1e293b"}}>{formatRupiah(product.sellPrice)}</div>
+              <div style={{fontSize:9.5, color:"#64748b", marginTop:2}}>per {product.baseUnit}</div>
+            </div>
+            {hasPack && (
+              <div style={{background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:6, padding:"6px 8px", gridColumn:"1/-1"}}>
+                <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", fontSize:10.5, fontWeight:700, color:"#15803d"}}>
+                  <span>Grosir: 1 {product.packUnit} ({product.packConversion} {product.baseUnit})</span>
+                  <span style={{fontFamily:"monospace"}}>{formatRupiah(packSellPrice)}</span>
+                </div>
+                {packDiscount > 0 && (
+                  <div style={{fontSize:9.5, color:"#16a34a", marginTop:2}}>
+                    Hemat {formatRupiah(packDiscount)} vs beli {product.packConversion} {product.baseUnit}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        );
+      })()}
 
       {/* Actions */}
       <div style={{padding:"8px 12px", borderTop:"1px solid #f1f5f9", display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:5}}>
