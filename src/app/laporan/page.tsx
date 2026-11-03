@@ -51,6 +51,12 @@ export default function LaporanPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [period, setPeriod] = useState<"TODAY" | "YESTERDAY" | "7DAYS" | "MONTH">("TODAY");
   const [todayStr, setTodayStr] = useState("Hari ini");
+  const [dateKeys, setDateKeys] = useState({
+    todayKey: "",
+    yesterdayKey: "",
+    sevenDaysKey: "",
+    monthKey: "",
+  });
   const [cashDrawerAmount, setCashDrawerAmount] = useState<number>(0);
   const [trendDays, setTrendDays] = useState<DayTrend[]>([]);
 
@@ -91,13 +97,30 @@ export default function LaporanPage() {
 
   useEffect(() => {
     loadData();
+    const now = new Date();
     setTodayStr(
-      new Date().toLocaleDateString("id-ID", {
+      now.toLocaleDateString("id-ID", {
         day: "2-digit",
         month: "long",
         year: "numeric",
       })
     );
+    const todayKey = now.toISOString().slice(0, 10);
+    const yesterday = new Date();
+    yesterday.setDate(now.getDate() - 1);
+    const yesterdayKey = yesterday.toISOString().slice(0, 10);
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(now.getDate() - 7);
+    const sevenDaysKey = sevenDaysAgo.toISOString().slice(0, 10);
+    const monthKey = now.toISOString().slice(0, 7);
+
+    setDateKeys({
+      todayKey,
+      yesterdayKey,
+      sevenDaysKey,
+      monthKey,
+    });
+
     try {
       const id = getDeviceId();
       const savedDrawer = localStorage.getItem(`pos_cash_drawer_${id}`);
@@ -118,54 +141,32 @@ export default function LaporanPage() {
     } catch {}
   };
 
-  // Filter sales based on active period
+  // Filter sales based on active period (SSR-safe via dateKeys state)
   const filteredSales = useMemo(() => {
-    const now = new Date();
-    const todayKey = now.toISOString().slice(0, 10);
-    const yesterday = new Date();
-    yesterday.setDate(now.getDate() - 1);
-    const yesterdayKey = yesterday.toISOString().slice(0, 10);
-
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(now.getDate() - 7);
-    const sevenDaysKey = sevenDaysAgo.toISOString().slice(0, 10);
-
-    const monthKey = now.toISOString().slice(0, 7);
-
+    if (!dateKeys.todayKey) return sales;
     return sales.filter((s) => {
       const sKey = (s.createdAt || "").slice(0, 10);
-      if (period === "TODAY") return sKey === todayKey;
-      if (period === "YESTERDAY") return sKey === yesterdayKey;
-      if (period === "7DAYS") return sKey >= sevenDaysKey;
-      if (period === "MONTH") return (s.createdAt || "").startsWith(monthKey);
+      if (period === "TODAY") return sKey === dateKeys.todayKey;
+      if (period === "YESTERDAY") return sKey === dateKeys.yesterdayKey;
+      if (period === "7DAYS") return sKey >= dateKeys.sevenDaysKey;
+      if (period === "MONTH") return (s.createdAt || "").startsWith(dateKeys.monthKey);
       return true;
     });
-  }, [sales, period]);
+  }, [sales, period, dateKeys]);
 
-  // Filter expenses based on active period
+  // Filter expenses based on active period (SSR-safe via dateKeys state)
   const filteredExpenses = useMemo(() => {
-    const now = new Date();
-    const todayKey = now.toISOString().slice(0, 10);
-    const yesterday = new Date();
-    yesterday.setDate(now.getDate() - 1);
-    const yesterdayKey = yesterday.toISOString().slice(0, 10);
-
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(now.getDate() - 7);
-    const sevenDaysKey = sevenDaysAgo.toISOString().slice(0, 10);
-
-    const monthKey = now.toISOString().slice(0, 7);
-
+    if (!dateKeys.todayKey) return expenses;
     return expenses.filter((e) => {
       const eDate = e.createdAt || "";
       const eKey = eDate.slice(0, 10);
-      if (period === "TODAY") return eKey === todayKey;
-      if (period === "YESTERDAY") return eKey === yesterdayKey;
-      if (period === "7DAYS") return eKey >= sevenDaysKey;
-      if (period === "MONTH") return eDate.startsWith(monthKey);
+      if (period === "TODAY") return eKey === dateKeys.todayKey;
+      if (period === "YESTERDAY") return eKey === dateKeys.yesterdayKey;
+      if (period === "7DAYS") return eKey >= dateKeys.sevenDaysKey;
+      if (period === "MONTH") return eDate.startsWith(dateKeys.monthKey);
       return true;
     });
-  }, [expenses, period]);
+  }, [expenses, period, dateKeys]);
 
   // Calculated metrics
   const totalRevenue = filteredSales.reduce((s, sale) => s + sale.totalAmount, 0);
