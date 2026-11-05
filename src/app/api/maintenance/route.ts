@@ -3,6 +3,7 @@ import {
   getRawDatabase,
   restoreDatabase,
   resetDatabaseToDefault,
+  seedStarterProducts,
   getDeviceIdFromRequest,
 } from "@/lib/db";
 
@@ -114,6 +115,15 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success: true,
         message: `Database perangkat (${deviceId}) berhasil direset ke setelan awal Toko Dewi`,
+      });
+    }
+
+    if (body.action === "seed") {
+      const products = await seedStarterProducts(deviceId);
+      return NextResponse.json({
+        success: true,
+        data: products,
+        message: "15 produk sembako contoh berhasil dimuat!",
       });
     }
 

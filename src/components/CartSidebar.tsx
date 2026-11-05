@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { CartItem } from "@/lib/types";
+import { hasCustomDecimalPrices } from "@/lib/formatters";
 
 interface Props {
   cart: CartItem[];
@@ -18,7 +19,8 @@ function formatRupiah(n: number) {
 export default function CartSidebar({
   cart, totalAmount, onUpdateQuantity, onCheckout, onClearCart,
 }: Props) {
-  const cartCount = cart.reduce((s, it) => s + it.quantity, 0);
+  const rawCartCount = cart.reduce((s, it) => s + it.quantity, 0);
+  const cartCount = Math.round(rawCartCount * 100) / 100;
   const [todayStr, setTodayStr] = useState("Hari ini");
 
   useEffect(() => {
@@ -33,13 +35,13 @@ export default function CartSidebar({
           <div>
             <div className="kp-cart-header-title">
               <span>Pesanan</span>
-              {cartCount > 0 && (
+              {cart.length > 0 && (
                 <span style={{
                   background:"rgba(255,255,255,0.25)", color:"#fff",
                   fontSize:10, fontWeight:800, padding:"1px 7px", borderRadius:20,
                   marginLeft:8
                 }}>
-                  {cartCount} item
+                  {cart.length} barang ({cartCount})
                 </span>
               )}
             </div>
@@ -79,41 +81,194 @@ export default function CartSidebar({
             const unitLabel = item.unitUsed === "PACK" && item.product.packUnit
               ? item.product.packUnit
               : item.product.baseUnit;
+            const isWeighed =
+              item.unitUsed === "BASE" &&
+              ["kg", "liter", "ons", "gram"].includes(item.product.baseUnit.toLowerCase());
+            const stepMinus = item.quantity <= 1 ? 0.25 : 1;
+
             return (
-              <div key={`${item.product.id}-${item.unitUsed}`} className="kp-cart-item">
-                {/* Number */}
-                <div style={{
-                  width:18, height:18, borderRadius:"50%", background:"#16a34a",
-                  color:"#fff", fontSize:9, fontWeight:800, display:"flex",
-                  alignItems:"center", justifyContent:"center", flexShrink:0
-                }}>
-                  {idx + 1}
+              <div key={`${item.product.id}-${item.unitUsed}`} className="kp-cart-item" style={{flexDirection:"column", alignItems:"stretch", gap:6}}>
+                <div style={{display:"flex", alignItems:"center", gap:8}}>
+                  {/* Number */}
+                  <div style={{
+                    width:18, height:18, borderRadius:"50%", background:"#16a34a",
+                    color:"#fff", fontSize:9, fontWeight:800, display:"flex",
+                    alignItems:"center", justifyContent:"center", flexShrink:0
+                  }}>
+                    {idx + 1}
+                  </div>
+
+                  <div style={{flex:1, minWidth:0}}>
+                    <div className="kp-cart-item-name" style={{display:"-webkit-box", WebkitLineClamp:1, WebkitBoxOrient:"vertical", overflow:"hidden"}}>
+                      {item.product.name}
+                    </div>
+                    <div className="kp-cart-item-price">
+                      {new Intl.NumberFormat("id-ID").format(item.pricePerUnit)} × {item.quantity} {unitLabel}
+                      {item.unitUsed === "PACK" && item.product.hasMultiUnit && item.product.packConversion ? (
+                        <span style={{display:"block", fontSize:10, color:"#16a34a", fontWeight:700, marginTop:1}}>
+                          ({Math.round(item.quantity * item.product.packConversion * 100) / 100} {item.product.baseUnit})
+                        </span>
+                      ) : null}
+                      {item.unitUsed === "BASE" &&
+                      hasCustomDecimalPrices(item.product) &&
+                      item.quantity % 1 !== 0 ? (
+                        <span
+                          style={{
+                            display: "inline-block",
+                            fontSize: 9.5,
+                            color: "#15803d",
+                            background: "#dcfce7",
+                            padding: "0px 5px",
+                            borderRadius: 4,
+                            fontWeight: 700,
+                            marginTop: 2,
+                          }}
+                        >
+                          ⚖️ Harga desimal stok aktif
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div style={{textAlign:"right", flexShrink:0}}>
+                    <div style={{fontSize:12, fontWeight:800, color:"#16a34a", marginBottom:4}}>
+                      {new Intl.NumberFormat("id-ID").format(Math.round(item.subtotal))}
+                    </div>
+                    <div className="kp-cart-qty-control">
+                      <button
+                        type="button"
+                        className="kp-qty-btn"
+                        onClick={() =>
+                          onUpdateQuantity(
+                            item.product.id,
+                            item.unitUsed,
+                            Math.round((item.quantity - stepMinus) * 100) / 100
+                          )
+                        }
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        step="0.25"
+                        min="0"
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          if (!isNaN(val)) {
+                            onUpdateQuantity(item.product.id, item.unitUsed, val);
+                          }
+                        }}
+                        title="Ketik langsung jumlah barang (bisa desimal seperti 0.25 atau 0.5)"
+                        style={{
+                          width: 44,
+                          fontSize: 11.5,
+                          fontWeight: 800,
+                          textAlign: "center",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: 5,
+                          padding: "1px 2px",
+                          color: "#0f172a",
+                          background: "#f8fafc",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="kp-qty-btn"
+                        onClick={() =>
+                          onUpdateQuantity(
+                            item.product.id,
+                            item.unitUsed,
+                            Math.round((item.quantity + 1) * 100) / 100
+                          )
+                        }
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                <div style={{flex:1, minWidth:0}}>
-                  <div className="kp-cart-item-name" style={{display:"-webkit-box", WebkitLineClamp:1, WebkitBoxOrient:"vertical", overflow:"hidden"}}>
-                    {item.product.name}
-                  </div>
-                  <div className="kp-cart-item-price">
-                    {new Intl.NumberFormat("id-ID").format(item.pricePerUnit)} × {item.quantity} {unitLabel}
-                    {item.unitUsed === "PACK" && item.product.hasMultiUnit && item.product.packConversion ? (
-                      <span style={{display:"block", fontSize:10, color:"#16a34a", fontWeight:700, marginTop:1}}>
-                        ({item.quantity * item.product.packConversion} {item.product.baseUnit})
+                {/* Quick Fraction Chips for BASE items (especially Kg / Liter / timbangan) */}
+                {item.unitUsed === "BASE" && (
+                  <div style={{display:"flex", flexDirection:"column", paddingLeft:26, gap:4}}>
+                    <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", gap:4, flexWrap:"wrap"}}>
+                      <span style={{fontSize:9.5, color:"#64748b", fontWeight:600}}>
+                        {isWeighed ? "Timbangan:" : "Pecahan:"}
                       </span>
-                    ) : null}
+                      <div style={{display:"flex", gap:3, flexWrap:"wrap"}}>
+                        {[
+                          {
+                            label: "1/4",
+                            subPrice: item.product.sellPriceQuarter,
+                            val: 0.25,
+                          },
+                          {
+                            label: "1/2",
+                            subPrice: item.product.sellPriceHalf,
+                            val: 0.5,
+                          },
+                          {
+                            label: "3/4",
+                            subPrice: item.product.sellPriceThreeQuarter,
+                            val: 0.75,
+                          },
+                          { label: "1", val: 1 },
+                          {
+                            label: "+0.5",
+                            val: Math.round((item.quantity + 0.5) * 100) / 100,
+                            isAdd: true,
+                          },
+                        ].map((chip) => {
+                          const active = !chip.isAdd && item.quantity === chip.val;
+                          return (
+                            <button
+                              key={chip.label}
+                              type="button"
+                              onClick={() =>
+                                onUpdateQuantity(item.product.id, item.unitUsed, chip.val)
+                              }
+                              title={
+                                chip.subPrice
+                                  ? `Harga khusus ${chip.label} ${unitLabel}: ${formatRupiah(chip.subPrice)}`
+                                  : `Set jumlah ke ${chip.val} ${unitLabel}`
+                              }
+                              style={{
+                                fontSize: 9.5,
+                                fontWeight: 700,
+                                padding: "1.5px 5px",
+                                borderRadius: 4,
+                                cursor: "pointer",
+                                border: active
+                                  ? "1px solid #16a34a"
+                                  : chip.subPrice
+                                  ? "1px solid #86efac"
+                                  : "1px solid #e2e8f0",
+                                background: active
+                                  ? "#dcfce7"
+                                  : chip.subPrice
+                                  ? "#f0fdf4"
+                                  : "#f8fafc",
+                                color: active ? "#15803d" : "#334155",
+                              }}
+                            >
+                              {chip.label}
+                              {chip.subPrice
+                                ? ` (${
+                                    chip.subPrice >= 1000
+                                      ? `${(chip.subPrice / 1000).toLocaleString("id-ID", {
+                                          maximumFractionDigits: 1,
+                                        })}rb`
+                                      : chip.subPrice
+                                  })`
+                                : ""}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
-                </div>
-
-                <div style={{textAlign:"right", flexShrink:0}}>
-                  <div style={{fontSize:12, fontWeight:800, color:"#16a34a", marginBottom:4}}>
-                    {new Intl.NumberFormat("id-ID").format(item.subtotal)}
-                  </div>
-                  <div className="kp-cart-qty-control">
-                    <button className="kp-qty-btn" onClick={() => onUpdateQuantity(item.product.id, item.unitUsed, item.quantity - 1)}>−</button>
-                    <span style={{fontSize:12, fontWeight:700, minWidth:20, textAlign:"center"}}>{item.quantity}</span>
-                    <button className="kp-qty-btn" onClick={() => onUpdateQuantity(item.product.id, item.unitUsed, item.quantity + 1)}>+</button>
-                  </div>
-                </div>
+                )}
               </div>
             );
           })
@@ -123,12 +278,12 @@ export default function CartSidebar({
       {/* Footer */}
       <div className="kp-cart-footer">
         <div className="kp-cart-total-row">
-          <span>Subtotal ({cartCount} item)</span>
+          <span>Subtotal ({cart.length} macam)</span>
           <span>{formatRupiah(totalAmount)}</span>
         </div>
         <div className="kp-cart-total-row">
-          <span>Diskon</span>
-          <span style={{color:"#dc2626"}}>- Rp 0</span>
+          <span>Diskon / Nego</span>
+          <span style={{color:"#64748b", fontSize:10.5}}>Diatur saat bayar</span>
         </div>
         <div className="kp-cart-total-row grand">
           <span>Total Bayar</span>

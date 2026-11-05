@@ -6,7 +6,7 @@ import CategoryIcon from "./CategoryIcon";
 
 interface Props {
   product: Product;
-  onAddToCart: (product: Product, unitUsed: "BASE" | "PACK") => void;
+  onAddToCart: (product: Product, unitUsed: "BASE" | "PACK", customQty?: number) => void;
   cartItems: CartItem[];
 }
 
@@ -201,7 +201,7 @@ export default function PosProductCard({ product, onAddToCart, cartItems }: Prop
             background: selectedUnit === "PACK" ? "#f0fdf4" : "#f8fafc",
             padding: "2px 6px",
             borderRadius: 5,
-            marginBottom: 8,
+            marginBottom: 6,
             fontWeight: 600,
             display: "flex",
             alignItems: "center",
@@ -221,10 +221,78 @@ export default function PosProductCard({ product, onAddToCart, cartItems }: Prop
           </div>
         )}
 
+        {/* Custom Decimal Prices Quick Buttons (1/4, 1/2, 3/4) */}
+        {selectedUnit === "BASE" &&
+          (product.sellPriceQuarter || product.sellPriceHalf || product.sellPriceThreeQuarter) && (
+            <div
+              style={{
+                background: "#f0fdf4",
+                border: "1px solid #bbf7d0",
+                borderRadius: 7,
+                padding: "4px 6px",
+                marginBottom: 8,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 9,
+                  fontWeight: 800,
+                  color: "#166534",
+                  marginBottom: 3,
+                  display: "flex",
+                  justifyContent: "space-between",
+                }}
+              >
+                <span>⚖️ HARGA ECER DESIMAL:</span>
+                <span>Klik +Keranjang</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 }}>
+                {[
+                  { label: "1/4", qty: 0.25, price: product.sellPriceQuarter },
+                  { label: "1/2", qty: 0.5, price: product.sellPriceHalf },
+                  { label: "3/4", qty: 0.75, price: product.sellPriceThreeQuarter },
+                ].map((dec) => {
+                  const effPrice =
+                    dec.price && dec.price > 0
+                      ? dec.price
+                      : Math.round(product.sellPrice * dec.qty);
+                  const canAdd = product.stockInBase >= dec.qty;
+                  return (
+                    <button
+                      key={dec.label}
+                      type="button"
+                      disabled={!canAdd}
+                      onClick={() => onAddToCart(product, "BASE", dec.qty)}
+                      title={`Tambah ${dec.label} ${product.baseUnit} (${formatRupiah(effPrice)})`}
+                      style={{
+                        border: dec.price ? "1px solid #86efac" : "1px solid #e2e8f0",
+                        background: canAdd ? "#ffffff" : "#f1f5f9",
+                        borderRadius: 5,
+                        padding: "2px 3px",
+                        cursor: canAdd ? "pointer" : "not-allowed",
+                        opacity: canAdd ? 1 : 0.5,
+                        textAlign: "center",
+                      }}
+                    >
+                      <div style={{ fontSize: 9.5, fontWeight: 800, color: "#15803d" }}>
+                        +{dec.label}
+                      </div>
+                      <div style={{ fontSize: 8.5, fontWeight: 700, color: "#0f172a" }}>
+                        {effPrice >= 1000
+                          ? `${(effPrice / 1000).toLocaleString("id-ID", { maximumFractionDigits: 1 })}rb`
+                          : `${effPrice}`}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
         <button
           type="button"
           disabled={isDisabled}
-          onClick={() => onAddToCart(product, selectedUnit)}
+          onClick={() => onAddToCart(product, selectedUnit, 1)}
           style={{
             width: "100%",
             padding: "8px 0",

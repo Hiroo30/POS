@@ -32,6 +32,9 @@ export default function ProductFormModal({
   const [minStockInBase, setMinStockInBase] = useState("5");
   const [costPrice, setCostPrice] = useState("");
   const [sellPrice, setSellPrice] = useState("");
+  const [sellPriceQuarter, setSellPriceQuarter] = useState("");
+  const [sellPriceHalf, setSellPriceHalf] = useState("");
+  const [sellPriceThreeQuarter, setSellPriceThreeQuarter] = useState("");
   const [costPricePack, setCostPricePack] = useState("");
   const [sellPricePack, setSellPricePack] = useState("");
 
@@ -52,6 +55,9 @@ export default function ProductFormModal({
       setMinStockInBase(productToEdit.minStockInBase?.toString() || "5");
       setCostPrice(productToEdit.costPrice?.toString() || "");
       setSellPrice(productToEdit.sellPrice?.toString() || "");
+      setSellPriceQuarter(productToEdit.sellPriceQuarter?.toString() || "");
+      setSellPriceHalf(productToEdit.sellPriceHalf?.toString() || "");
+      setSellPriceThreeQuarter(productToEdit.sellPriceThreeQuarter?.toString() || "");
       setCostPricePack(productToEdit.costPricePack?.toString() || "");
       setSellPricePack(productToEdit.sellPricePack?.toString() || "");
     } else {
@@ -66,6 +72,9 @@ export default function ProductFormModal({
       setMinStockInBase("5");
       setCostPrice("");
       setSellPrice("");
+      setSellPriceQuarter("");
+      setSellPriceHalf("");
+      setSellPriceThreeQuarter("");
       setCostPricePack("");
       setSellPricePack("");
     }
@@ -105,6 +114,25 @@ export default function ProductFormModal({
     setSellPricePack(val);
   };
 
+  const handleAutoFillDecimalPrices = () => {
+    const base = parseFloat(sellPrice) || 0;
+    if (base <= 0) {
+      setErrorMessage("Isi Harga Jual satuan dasar terlebih dahulu untuk membuat saran harga desimal!");
+      return;
+    }
+    setErrorMessage("");
+    const round500 = (n: number) => Math.ceil(n / 500) * 500;
+    setSellPriceQuarter(round500(base * 0.25).toString());
+    setSellPriceHalf(round500(base * 0.5).toString());
+    setSellPriceThreeQuarter(round500(base * 0.75).toString());
+  };
+
+  const handleClearDecimalPrices = () => {
+    setSellPriceQuarter("");
+    setSellPriceHalf("");
+    setSellPriceThreeQuarter("");
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
@@ -131,6 +159,9 @@ export default function ProductFormModal({
       minStockInBase: parseFloat(minStockInBase) || 5,
       costPrice: parseFloat(costPrice) || 0,
       sellPrice: parseFloat(sellPrice) || 0,
+      sellPriceQuarter: parseFloat(sellPriceQuarter) > 0 ? parseFloat(sellPriceQuarter) : 0,
+      sellPriceHalf: parseFloat(sellPriceHalf) > 0 ? parseFloat(sellPriceHalf) : 0,
+      sellPriceThreeQuarter: parseFloat(sellPriceThreeQuarter) > 0 ? parseFloat(sellPriceThreeQuarter) : 0,
       costPricePack: hasMultiUnit && costPricePack ? parseFloat(costPricePack) : undefined,
       sellPricePack: hasMultiUnit && sellPricePack ? parseFloat(sellPricePack) : undefined,
     };
@@ -305,6 +336,89 @@ export default function ProductFormModal({
                   <input type="number" value={sellPricePack} onChange={(e) => handleSellPricePackChange(e.target.value)} placeholder="125000" className="kp-input" style={{borderColor:"#16a34a"}} />
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Harga Eceran Per Desimal / Timbangan (Opsional) */}
+          <div style={{background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, padding:"10px 12px"}}>
+            <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:6, marginBottom:8}}>
+              <div>
+                <div style={{fontSize:11.5, fontWeight:800, color:"#166534"}}>
+                  ⚖️ Harga Eceran Per Desimal / Timbangan (Opsional)
+                </div>
+                <div style={{fontSize:10, color:"#15803d"}}>
+                  Tentukan harga khusus untuk pembelian pecahan 1/4, 1/2, atau 3/4 {baseUnit} di Kasir POS
+                </div>
+              </div>
+              <div style={{display:"flex", gap:5}}>
+                <button
+                  type="button"
+                  onClick={handleAutoFillDecimalPrices}
+                  style={{
+                    background:"#ffffff", border:"1px solid #86efac", color:"#15803d",
+                    borderRadius:5, fontSize:10, fontWeight:700, padding:"3px 8px", cursor:"pointer"
+                  }}
+                >
+                  ✨ Isi Saran Harga Desimal
+                </button>
+                {(sellPriceQuarter || sellPriceHalf || sellPriceThreeQuarter) && (
+                  <button
+                    type="button"
+                    onClick={handleClearDecimalPrices}
+                    style={{
+                      background:"#ffffff", border:"1px solid #cbd5e1", color:"#64748b",
+                      borderRadius:5, fontSize:10, fontWeight:700, padding:"3px 8px", cursor:"pointer"
+                    }}
+                  >
+                    Kosongkan
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div style={{display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:8}}>
+              <div>
+                <label className="kp-label" style={{fontSize:10.5}}>
+                  Harga 1/4 (0.25 {baseUnit})
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={sellPriceQuarter}
+                  onChange={(e) => setSellPriceQuarter(e.target.value)}
+                  placeholder={sellPrice ? String(Math.round(parseFloat(sellPrice) * 0.25)) : "Cth: 5000"}
+                  className="kp-input"
+                  style={{fontSize:12, background:"#ffffff"}}
+                />
+              </div>
+              <div>
+                <label className="kp-label" style={{fontSize:10.5}}>
+                  Harga 1/2 (0.5 {baseUnit})
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={sellPriceHalf}
+                  onChange={(e) => setSellPriceHalf(e.target.value)}
+                  placeholder={sellPrice ? String(Math.round(parseFloat(sellPrice) * 0.5)) : "Cth: 9500"}
+                  className="kp-input"
+                  style={{fontSize:12, background:"#ffffff"}}
+                />
+              </div>
+              <div>
+                <label className="kp-label" style={{fontSize:10.5}}>
+                  Harga 3/4 (0.75 {baseUnit})
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={sellPriceThreeQuarter}
+                  onChange={(e) => setSellPriceThreeQuarter(e.target.value)}
+                  placeholder={sellPrice ? String(Math.round(parseFloat(sellPrice) * 0.75)) : "Cth: 14000"}
+                  className="kp-input"
+                  style={{fontSize:12, background:"#ffffff"}}
+                />
+              </div>
             </div>
           </div>
 

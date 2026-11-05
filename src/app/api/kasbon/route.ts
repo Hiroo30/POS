@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { getKasbonList, addKasbonManual, payKasbon, getDeviceIdFromRequest } from "@/lib/db";
+import {
+  getKasbonList,
+  addKasbonManual,
+  payKasbon,
+  deleteKasbon,
+  getDeviceIdFromRequest,
+} from "@/lib/db";
 
 export async function GET(request: Request) {
   try {
@@ -88,6 +94,39 @@ export async function PUT(request: Request) {
     console.error("Error updating kasbon:", error);
     return NextResponse.json(
       { success: false, error: "Gagal memproses pembayaran kasbon" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const deviceId = getDeviceIdFromRequest(request);
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: "ID kasbon wajib dicantumkan" },
+        { status: 400 }
+      );
+    }
+
+    const deleted = await deleteKasbon(id, deviceId);
+    if (!deleted) {
+      return NextResponse.json(
+        { success: false, error: "Catatan kasbon tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Catatan kasbon berhasil dihapus",
+    });
+  } catch (error) {
+    console.error("Error deleting kasbon:", error);
+    return NextResponse.json(
+      { success: false, error: "Gagal menghapus catatan kasbon" },
       { status: 500 }
     );
   }

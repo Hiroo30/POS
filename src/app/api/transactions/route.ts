@@ -51,6 +51,13 @@ export async function POST(request: Request) {
       quantityInput: qty,
       note: body.note,
       newCostPrice: body.newCostPrice ? Number(body.newCostPrice) : undefined,
+      newSellPrice: body.newSellPrice !== undefined ? Number(body.newSellPrice) : undefined,
+      sellPriceQuarter:
+        body.sellPriceQuarter !== undefined ? Number(body.sellPriceQuarter) : undefined,
+      sellPriceHalf:
+        body.sellPriceHalf !== undefined ? Number(body.sellPriceHalf) : undefined,
+      sellPriceThreeQuarter:
+        body.sellPriceThreeQuarter !== undefined ? Number(body.sellPriceThreeQuarter) : undefined,
     }, deviceId);
 
     if (!result) {

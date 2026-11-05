@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import type { KasbonRecord } from "@/lib/types";
 import { formatRupiah } from "@/lib/formatters";
-import { deviceFetch } from "@/lib/device";
+import { deviceFetch, getDeviceId } from "@/lib/device";
 
 export default function KasbonPage() {
   const [records, setRecords] = useState<KasbonRecord[]>([]);
@@ -20,6 +20,12 @@ export default function KasbonPage() {
   const [newItemsSummary, setNewItemsSummary] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState("");
+
+  // Installment / Payment Modal state
+  const [selectedBon, setSelectedBon] = useState<KasbonRecord | null>(null);
+  const [payInput, setPayInput] = useState("");
+  const [addToCashDrawer, setAddToCashDrawer] = useState(true);
+  const [isPaying, setIsPaying] = useState(false);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -62,20 +68,72 @@ export default function KasbonPage() {
   ).length;
   const lunasCount = records.filter((r) => r.status === "LUNAS").length;
 
-  const handleMarkPaid = async (r: KasbonRecord) => {
-    const payAmt = r.remainingAmount ?? r.amount;
-    const confirm = window.confirm(`Lunasi kasbon ${r.customerName} sebesar ${formatRupiah(payAmt)}?`);
-    if (!confirm) return;
+  const openPaymentModal = (r: KasbonRecord) => {
+    const sisa = r.remainingAmount ?? r.amount;
+    setSelectedBon(r);
+    setPayInput(String(sisa));
+    setAddToCashDrawer(true);
+  };
 
+  const handleConfirmPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedBon) return;
+    const sisa = selectedBon.remainingAmount ?? selectedBon.amount;
+    const payAmt = Math.min(sisa, parseInt(payInput.replace(/\D/g, ""), 10) || 0);
+    if (payAmt <= 0) {
+      alert("Masukkan nominal pembayaran lebih dari Rp 0!");
+      return;
+    }
+
+    setIsPaying(true);
     try {
       const res = await deviceFetch("/api/kasbon", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: r.id, amount: payAmt }),
+        body: JSON.stringify({ id: selectedBon.id, amount: payAmt }),
       });
-      if (res.ok) {
-        showToast(`Kasbon ${r.customerName} berhasil dilunasi!`);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (addToCashDrawer) {
+          try {
+            const devId = getDeviceId();
+            const currentDrawer = parseInt(localStorage.getItem(`pos_cash_drawer_${devId}`) || "0", 10) || 0;
+            localStorage.setItem(`pos_cash_drawer_${devId}`, String(currentDrawer + payAmt));
+          } catch {}
+        }
+        showToast(
+          payAmt >= sisa
+            ? `Kasbon ${selectedBon.customerName} telah LUNAS sepenuhnya!`
+            : `Cicilan ${formatRupiah(payAmt)} dari ${selectedBon.customerName} berhasil dicatat!`
+        );
+        setSelectedBon(null);
         loadData();
+      } else {
+        alert(data.error || "Gagal memproses pembayaran kasbon");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
+  const handleDeleteKasbon = async (r: KasbonRecord) => {
+    const ok = window.confirm(
+      `Hapus catatan kasbon "${r.customerName}" (${formatRupiah(r.amount)}) dari buku kasbon?`
+    );
+    if (!ok) return;
+
+    try {
+      const res = await deviceFetch(`/api/kasbon?id=${encodeURIComponent(r.id)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(`Catatan kasbon ${r.customerName} berhasil dihapus`);
+        loadData();
+      } else {
+        alert(data.error || "Gagal menghapus catatan kasbon");
       }
     } catch (err) {
       console.error(err);
@@ -124,7 +182,8 @@ export default function KasbonPage() {
 
   const handleSendWA = (r: KasbonRecord) => {
     const sisa = r.remainingAmount ?? r.amount;
-    const text = `Halo ${r.customerName}, salam dari Toko DEWI 🙏\n\nKami menginfokan catatan bon belanja sembako Anda:\n- Total Tagihan: ${formatRupiah(sisa)}\n- Jatuh Tempo: ${r.dueDate || "Sesuai kesepakatan"}\n- Rincian: ${r.itemsSummary || "Belanja sembako"}\n\nPembayaran bisa tunai ke toko atau via QRIS. Terima kasih banyak ya!`;
+    const paid = r.paidAmount || 0;
+    const text = `Halo ${r.customerName}, salam dari Toko DEWI 🙏\n\nKami menginfokan catatan bon belanja sembako Anda:\n- Total Awal Bon: ${formatRupiah(r.amount)}${paid > 0 ? `\n- Sudah Dicicil: ${formatRupiah(paid)}` : ""}\n- *Sisa Tagihan: ${formatRupiah(sisa)}*\n- Jatuh Tempo: ${r.dueDate || "Sesuai kesepakatan"}\n- Rincian: ${r.itemsSummary || "Belanja sembako"}\n\nPembayaran bisa dicicil atau dilunasi tunai ke toko maupun via QRIS. Terima kasih banyak ya!`;
     const cleanPhone = r.phone ? r.phone.replace(/\D/g, "").replace(/^0/, "62") : "";
     const waUrl = cleanPhone 
       ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`
@@ -343,6 +402,8 @@ export default function KasbonPage() {
             ) : (
               filtered.map((r) => {
                 const sisa = r.remainingAmount ?? r.amount;
+                const paid = r.paidAmount || 0;
+                const paidPercent = r.amount > 0 ? Math.min(100, Math.round((paid / r.amount) * 100)) : 0;
                 const isOverdue = r.dueDate && new Date(r.dueDate).getTime() < nowMs && r.status === "BELUM_LUNAS";
                 const initials = r.customerName
                   .split(" ")
@@ -395,6 +456,27 @@ export default function KasbonPage() {
                       </div>
                     </div>
 
+                    {/* Progress Cicilan / Total Bon Info */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#64748b" }}>
+                        <span>Total Awal Bon: <strong>{formatRupiah(r.amount)}</strong></span>
+                        <span>Sudah Dicicil: <strong style={{ color: "#16a34a" }}>{formatRupiah(paid)} ({paidPercent}%)</strong></span>
+                      </div>
+                      {paid > 0 && (
+                        <div style={{ width: "100%", height: 6, background: "#f1f5f9", borderRadius: 99, overflow: "hidden" }}>
+                          <div
+                            style={{
+                              width: `${paidPercent}%`,
+                              height: "100%",
+                              background: r.status === "LUNAS" ? "#16a34a" : "#10b981",
+                              borderRadius: 99,
+                              transition: "width 0.3s ease",
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
                     {/* Items Summary & Due Date */}
                     <div style={{
                       padding: "8px 12px", background: "#f8fafc", borderRadius: 8,
@@ -412,41 +494,58 @@ export default function KasbonPage() {
                     </div>
 
                     {/* Actions Row */}
-                    <div style={{display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, borderTop: "1px dashed #e2e8f0", paddingTop: 10}}>
-                      {r.status === "BELUM_LUNAS" && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleSendWA(r)}
-                            style={{
-                              background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0",
-                              borderRadius: 8, padding: "6px 12px", fontSize: 11.5, fontWeight: 700,
-                              cursor: "pointer", display: "flex", alignItems: "center", gap: 4
-                            }}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347"/>
-                            </svg>
-                            Kirim WA
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleMarkPaid(r)}
-                            style={{
-                              background: "#006c49", color: "#ffffff", border: "none",
-                              borderRadius: 8, padding: "6px 14px", fontSize: 11.5, fontWeight: 700,
-                              cursor: "pointer", display: "flex", alignItems: "center", gap: 4
-                            }}
-                          >
-                            Tandai Lunas
-                          </button>
-                        </>
-                      )}
-                      {r.status === "LUNAS" && (
-                        <span style={{fontSize: 11, color: "#16a34a", fontWeight: 700}}>
-                          ✓ Sudah Dibayar Lunas
-                        </span>
-                      )}
+                    <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderTop: "1px dashed #e2e8f0", paddingTop: 10}}>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteKasbon(r)}
+                        title="Hapus catatan kasbon ini"
+                        style={{
+                          background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca",
+                          borderRadius: 8, padding: "6px 10px", fontSize: 11, fontWeight: 700,
+                          cursor: "pointer", display: "flex", alignItems: "center", gap: 4
+                        }}
+                      >
+                        <span className="material-symbols-outlined text-[14px]">delete</span>
+                        <span>Hapus</span>
+                      </button>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {r.status === "BELUM_LUNAS" && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleSendWA(r)}
+                              style={{
+                                background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0",
+                                borderRadius: 8, padding: "6px 12px", fontSize: 11.5, fontWeight: 700,
+                                cursor: "pointer", display: "flex", alignItems: "center", gap: 4
+                              }}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347"/>
+                              </svg>
+                              Kirim WA
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openPaymentModal(r)}
+                              style={{
+                                background: "#006c49", color: "#ffffff", border: "none",
+                                borderRadius: 8, padding: "6px 14px", fontSize: 11.5, fontWeight: 700,
+                                cursor: "pointer", display: "flex", alignItems: "center", gap: 4
+                              }}
+                            >
+                              <span className="material-symbols-outlined text-[15px]">payments</span>
+                              <span>Bayar / Cicil</span>
+                            </button>
+                          </>
+                        )}
+                        {r.status === "LUNAS" && (
+                          <span style={{fontSize: 11, color: "#16a34a", fontWeight: 700}}>
+                            ✓ Sudah Dibayar Lunas
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -619,6 +718,138 @@ export default function KasbonPage() {
           </div>
         </div>
       </div>
+
+      {/* Modal Pembayaran Cicilan / Pelunasan Kasbon */}
+      {selectedBon && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs select-none animate-fadeIn"
+          onClick={() => setSelectedBon(null)}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 animate-scaleUp"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-gradient-to-r from-[#1b2e1f] to-emerald-800 p-5 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600/50 flex items-center justify-center text-white border border-emerald-400/30">
+                  <span className="material-symbols-outlined text-[22px]">payments</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">Bayar / Cicil Kasbon</h3>
+                  <p className="text-xs text-emerald-200">{selectedBon.customerName}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedBon(null)}
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmPayment} className="p-5 space-y-4">
+              {(() => {
+                const sisa = selectedBon.remainingAmount ?? selectedBon.amount;
+                const currentPay = Math.min(sisa, parseInt(payInput.replace(/\D/g, ""), 10) || 0);
+                const nextRemaining = Math.max(0, sisa - currentPay);
+                return (
+                  <>
+                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex items-center justify-between">
+                      <div>
+                        <div className="text-[10px] font-bold uppercase text-slate-400">Total Sisa Hutang</div>
+                        <div className="text-lg font-black text-rose-600">{formatRupiah(sisa)}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[10px] font-bold uppercase text-slate-400">Sisa Setelah Bayar</div>
+                        <div className="text-lg font-black text-emerald-700">
+                          {nextRemaining === 0 ? "LUNAS (Rp 0)" : formatRupiah(nextRemaining)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                        Nominal Pembayaran Sekarang (Rp)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
+                          Rp
+                        </span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          required
+                          autoFocus
+                          value={currentPay > 0 ? currentPay.toLocaleString("id-ID") : ""}
+                          onChange={(e) => setPayInput(e.target.value.replace(/\D/g, ""))}
+                          placeholder="0"
+                          className="w-full pl-11 pr-4 py-3 bg-white border-2 border-emerald-600/40 focus:border-emerald-600 rounded-xl text-xl font-black text-slate-900 outline-none"
+                        />
+                      </div>
+
+                      {/* Quick Installment Chips */}
+                      <div className="flex flex-wrap gap-2 mt-2.5">
+                        {[
+                          { label: "Cicil 25%", val: Math.max(1000, Math.round((sisa * 0.25) / 1000) * 1000) },
+                          { label: "Cicil 50%", val: Math.max(1000, Math.round((sisa * 0.5) / 1000) * 1000) },
+                          ...(sisa > 50000 ? [{ label: "Rp 50.000", val: 50000 }] : []),
+                          { label: "Lunasi Penuh (100%)", val: sisa },
+                        ].map((chip) => (
+                          <button
+                            key={chip.label}
+                            type="button"
+                            onClick={() => setPayInput(String(Math.min(sisa, chip.val)))}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                              currentPay === Math.min(sisa, chip.val)
+                                ? "bg-emerald-700 text-white border-emerald-700"
+                                : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                            }`}
+                          >
+                            {chip.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl">
+                      <label className="flex items-center gap-2.5 cursor-pointer text-xs font-bold text-emerald-950">
+                        <input
+                          type="checkbox"
+                          checked={addToCashDrawer}
+                          onChange={(e) => setAddToCashDrawer(e.target.checked)}
+                        />
+                        <span>Masukkan uang pembayaran ini ke Saldo Laci Kasir</span>
+                      </label>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBon(null)}
+                        className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isPaying || currentPay <= 0}
+                        className="flex-1 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-md cursor-pointer disabled:opacity-50"
+                      >
+                        {isPaying
+                          ? "Memproses..."
+                          : nextRemaining === 0
+                          ? `Lunasi ${formatRupiah(currentPay)}`
+                          : `Simpan Cicilan ${formatRupiah(currentPay)}`}
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

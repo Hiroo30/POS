@@ -14,7 +14,12 @@ import {
   StoreExpense,
   ExpenseCategory,
 } from "./types";
-import { INITIAL_PRODUCTS, INITIAL_KASBON } from "./seedData";
+import {
+  INITIAL_PRODUCTS,
+  INITIAL_KASBON,
+  STARTER_SEMBAKO_PRODUCTS,
+} from "./seedData";
+import { calculateProductBaseSubtotal } from "./formatters";
 
 // File path for local fallback
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -450,11 +455,31 @@ export async function updateProduct(
   const index = db.products.findIndex((p) => p.id === id);
   if (index === -1) return null;
 
-  db.products[index] = {
+  const updatedProduct: Product = {
     ...db.products[index],
-    ...updateData,
-    updatedAt: new Date().toISOString(),
   };
+
+  for (const [key, value] of Object.entries(updateData)) {
+    if (value !== undefined) {
+      (updatedProduct as unknown as Record<string, unknown>)[key] = value;
+    }
+  }
+
+  if (updateData.sellPriceQuarter !== undefined && !(updateData.sellPriceQuarter > 0)) {
+    delete updatedProduct.sellPriceQuarter;
+  }
+  if (updateData.sellPriceHalf !== undefined && !(updateData.sellPriceHalf > 0)) {
+    delete updatedProduct.sellPriceHalf;
+  }
+  if (
+    updateData.sellPriceThreeQuarter !== undefined &&
+    !(updateData.sellPriceThreeQuarter > 0)
+  ) {
+    delete updatedProduct.sellPriceThreeQuarter;
+  }
+
+  updatedProduct.updatedAt = new Date().toISOString();
+  db.products[index] = updatedProduct;
 
   await saveDbState(db, deviceId);
   return db.products[index];
@@ -480,6 +505,10 @@ export interface MutateStockInput {
   quantityInput: number;
   note?: string;
   newCostPrice?: number;
+  newSellPrice?: number;
+  sellPriceQuarter?: number;
+  sellPriceHalf?: number;
+  sellPriceThreeQuarter?: number;
 }
 
 export async function recordStockMutation(
@@ -497,19 +526,21 @@ export async function recordStockMutation(
   const conversion =
     product.hasMultiUnit && product.packConversion ? product.packConversion : 1;
   const quantityInBase =
-    input.unitUsed === "PACK"
-      ? input.quantityInput * conversion
-      : input.quantityInput;
+    Math.round(
+      (input.unitUsed === "PACK"
+        ? input.quantityInput * conversion
+        : input.quantityInput) * 100
+    ) / 100;
 
   const stockBefore = product.stockInBase;
   let stockAfter = stockBefore;
 
   if (input.type === "IN") {
-    stockAfter = stockBefore + quantityInBase;
+    stockAfter = Math.round((stockBefore + quantityInBase) * 100) / 100;
   } else if (input.type === "OUT") {
-    stockAfter = Math.max(0, stockBefore - quantityInBase);
+    stockAfter = Math.max(0, Math.round((stockBefore - quantityInBase) * 100) / 100);
   } else if (input.type === "ADJUST") {
-    stockAfter = quantityInBase;
+    stockAfter = Math.round(quantityInBase * 100) / 100;
   }
 
   if (input.newCostPrice && input.newCostPrice > 0 && input.type === "IN") {
@@ -522,6 +553,21 @@ export async function recordStockMutation(
         product.costPricePack = input.newCostPrice * conversion;
       }
     }
+  }
+
+  if (input.newSellPrice !== undefined && input.newSellPrice > 0) {
+    product.sellPrice = input.newSellPrice;
+  }
+
+  if (input.sellPriceQuarter !== undefined) {
+    product.sellPriceQuarter = input.sellPriceQuarter > 0 ? input.sellPriceQuarter : undefined;
+  }
+  if (input.sellPriceHalf !== undefined) {
+    product.sellPriceHalf = input.sellPriceHalf > 0 ? input.sellPriceHalf : undefined;
+  }
+  if (input.sellPriceThreeQuarter !== undefined) {
+    product.sellPriceThreeQuarter =
+      input.sellPriceThreeQuarter > 0 ? input.sellPriceThreeQuarter : undefined;
   }
 
   product.stockInBase = stockAfter;
@@ -580,6 +626,7 @@ export interface CreateSaleInput {
   notes?: string;
   dueDate?: string; // Untuk Kasbon
   pointsRedeemed?: number;
+  discountAmount?: number;
 }
 
 export async function processSale(
@@ -626,9 +673,9 @@ export async function processSale(
       prod.hasMultiUnit && prod.packConversion ? prod.packConversion : 1;
     const unitUsed: "BASE" | "PACK" =
       cartItem.unitUsed === "PACK" ? "PACK" : "BASE";
-    const quantity = Number(cartItem.quantity || cartItem.qty) || 1;
+    const quantity = Math.max(0.01, Number(cartItem.quantity || cartItem.qty) || 1);
     const qtyInBase =
-      unitUsed === "PACK" ? quantity * conversion : quantity;
+      Math.round((unitUsed === "PACK" ? quantity * conversion : quantity) * 100) / 100;
 
     // Hitung cost price modal
     const costPerUnit =
@@ -642,15 +689,18 @@ export async function processSale(
         ? prod.sellPricePack
         : prod.sellPrice);
 
-    const itemSubtotal = pricePerUnit * quantity;
-    const itemCost = costPerUnit * quantity;
+    const itemSubtotal =
+      unitUsed === "BASE"
+        ? calculateProductBaseSubtotal(prod, quantity, pricePerUnit)
+        : Math.round(pricePerUnit * quantity);
+    const itemCost = Math.round(costPerUnit * quantity);
 
     totalAmount += itemSubtotal;
     totalCost += itemCost;
 
     if (pIndex !== -1) {
       const stockBefore = db.products[pIndex].stockInBase;
-      const stockAfter = Math.max(0, stockBefore - qtyInBase);
+      const stockAfter = Math.max(0, Math.round((stockBefore - qtyInBase) * 100) / 100);
       db.products[pIndex].stockInBase = stockAfter;
       db.products[pIndex].updatedAt = now.toISOString();
 
@@ -691,7 +741,9 @@ export async function processSale(
   const pointsRedeemed = Math.max(0, Number(input.pointsRedeemed) || 0);
   // 10 poin = Diskon Rp 5.000
   const pointsDiscount = pointsRedeemed > 0 ? Math.floor(pointsRedeemed / 10) * 5000 : 0;
-  const finalTotalAmount = Math.max(0, totalAmount - pointsDiscount);
+  const manualDiscount = Math.max(0, Math.round(Number(input.discountAmount) || 0));
+  const totalDiscount = pointsDiscount + manualDiscount;
+  const finalTotalAmount = Math.max(0, totalAmount - totalDiscount);
   const profit = finalTotalAmount - totalCost;
   const changeAmount =
     input.paymentMethod === "KASBON"
@@ -718,6 +770,7 @@ export async function processSale(
     notes: input.notes,
     pointsEarned,
     pointsRedeemed: pointsRedeemed > 0 ? pointsRedeemed : undefined,
+    discountAmount: totalDiscount > 0 ? totalDiscount : undefined,
     createdAt: now.toISOString(),
   };
 
@@ -823,7 +876,7 @@ export async function deleteSale(
             ? item.quantity * prod.packConversion
             : item.quantity;
         const stockBefore = prod.stockInBase;
-        const stockAfter = stockBefore + baseQty;
+        const stockAfter = Math.round((stockBefore + baseQty) * 100) / 100;
         prod.stockInBase = stockAfter;
         prod.updatedAt = now.toISOString();
 
@@ -933,6 +986,21 @@ export async function payKasbon(
   db.kasbon[index] = bon;
   await saveDbState(db, deviceId);
   return bon;
+}
+
+export async function deleteKasbon(
+  id: string,
+  deviceId?: string
+): Promise<boolean> {
+  const db = await getDbState(deviceId);
+  if (!db.kasbon) return false;
+  const initialLen = db.kasbon.length;
+  db.kasbon = db.kasbon.filter((b) => b.id !== id);
+  if (db.kasbon.length !== initialLen) {
+    await saveDbState(db, deviceId);
+    return true;
+  }
+  return false;
 }
 
 // ─── Transactions ─────────────────────────────────────────────────────────────
@@ -1050,6 +1118,7 @@ export async function getStoreSummary(deviceId?: string): Promise<StoreSummary> 
     totalAssetValue,
     totalPotentialRevenue,
     todaySales,
+    todayRevenue: todaySales,
     todayProfit,
     todayOrderCount,
     totalKasbon,
@@ -1211,6 +1280,30 @@ export async function redeemCustomerPoints(
 
 // ─── Maintenance ──────────────────────────────────────────────────────────────
 
+export async function seedStarterProducts(deviceId?: string): Promise<Product[]> {
+  const db = await getDbState(deviceId);
+  const now = new Date().toISOString();
+  const starterCopies = STARTER_SEMBAKO_PRODUCTS.map((p) => ({
+    ...p,
+    createdAt: now,
+    updatedAt: now,
+  }));
+
+  if (!db.products || db.products.length === 0) {
+    db.products = starterCopies;
+  } else {
+    const existingIds = new Set(db.products.map((p) => p.id));
+    for (const item of starterCopies) {
+      if (!existingIds.has(item.id)) {
+        db.products.push(item);
+      }
+    }
+  }
+
+  await saveDbState(db, deviceId);
+  return db.products;
+}
+
 export async function resetDatabaseToDefault(deviceId?: string): Promise<void> {
   const db = createInitialState();
   await saveDbState(db, deviceId);
@@ -1221,6 +1314,8 @@ export async function getRawDatabase(deviceId?: string): Promise<{
   transactions: Transaction[];
   sales: SaleTransaction[];
   kasbon: KasbonRecord[];
+  customers: Customer[];
+  expenses: StoreExpense[];
   lastBackupDate?: string;
 }> {
   const db = await getDbState(deviceId);
@@ -1229,6 +1324,8 @@ export async function getRawDatabase(deviceId?: string): Promise<{
     transactions: db.transactions || [],
     sales: db.sales || [],
     kasbon: db.kasbon || [],
+    customers: db.customers || [],
+    expenses: db.expenses || [],
     lastBackupDate: db.lastBackupDate || new Date().toISOString(),
   };
 }
@@ -1239,16 +1336,21 @@ export async function restoreDatabase(
     transactions: Transaction[];
     sales?: SaleTransaction[];
     kasbon?: KasbonRecord[];
+    customers?: Customer[];
+    expenses?: StoreExpense[];
   },
   deviceId?: string
 ): Promise<boolean> {
   if (!data || !Array.isArray(data.products)) return false;
 
+  const initial = createInitialState();
   const db: DatabaseSchema = {
     products: data.products,
     transactions: Array.isArray(data.transactions) ? data.transactions : [],
     sales: Array.isArray(data.sales) ? data.sales : [],
     kasbon: Array.isArray(data.kasbon) ? data.kasbon : INITIAL_KASBON,
+    customers: Array.isArray(data.customers) ? data.customers : initial.customers || [],
+    expenses: Array.isArray(data.expenses) ? data.expenses : initial.expenses || [],
     lastBackupDate: new Date().toISOString(),
   };
 

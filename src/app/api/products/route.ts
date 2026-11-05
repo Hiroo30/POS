@@ -41,6 +41,9 @@ export async function POST(request: Request) {
       minStockInBase: Number(body.minStockInBase) || 5,
       costPrice: Number(body.costPrice) || 0,
       sellPrice: Number(body.sellPrice) || 0,
+      sellPriceQuarter: body.sellPriceQuarter ? Number(body.sellPriceQuarter) : undefined,
+      sellPriceHalf: body.sellPriceHalf ? Number(body.sellPriceHalf) : undefined,
+      sellPriceThreeQuarter: body.sellPriceThreeQuarter ? Number(body.sellPriceThreeQuarter) : undefined,
       costPricePack: body.costPricePack ? Number(body.costPricePack) : undefined,
       sellPricePack: body.sellPricePack ? Number(body.sellPricePack) : undefined,
     }, deviceId);

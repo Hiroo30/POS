@@ -98,3 +98,51 @@ export function formatDateTime(dateString: string): string {
     return dateString;
   }
 }
+
+export function hasCustomDecimalPrices(product?: Product | null): boolean {
+  if (!product) return false;
+  return Boolean(
+    (product.sellPriceQuarter && product.sellPriceQuarter > 0) ||
+      (product.sellPriceHalf && product.sellPriceHalf > 0) ||
+      (product.sellPriceThreeQuarter && product.sellPriceThreeQuarter > 0)
+  );
+}
+
+export function calculateProductBaseSubtotal(
+  product: Product,
+  quantity: number,
+  fallbackPricePerUnit?: number
+): number {
+  const safeQty = Math.max(0, Number(quantity) || 0);
+  const basePrice = fallbackPricePerUnit ?? product.sellPrice ?? 0;
+  const whole = Math.floor(safeQty + 1e-9);
+  const frac = Math.round((safeQty - whole) * 100) / 100;
+
+  const wholePrice = whole * basePrice;
+  let fracPrice = 0;
+
+  if (frac === 0) {
+    fracPrice = 0;
+  } else if (frac === 0.25 && product.sellPriceQuarter && product.sellPriceQuarter > 0) {
+    fracPrice = product.sellPriceQuarter;
+  } else if (frac === 0.5 && product.sellPriceHalf && product.sellPriceHalf > 0) {
+    fracPrice = product.sellPriceHalf;
+  } else if (frac === 0.75) {
+    if (product.sellPriceThreeQuarter && product.sellPriceThreeQuarter > 0) {
+      fracPrice = product.sellPriceThreeQuarter;
+    } else if (
+      product.sellPriceHalf &&
+      product.sellPriceHalf > 0 &&
+      product.sellPriceQuarter &&
+      product.sellPriceQuarter > 0
+    ) {
+      fracPrice = product.sellPriceHalf + product.sellPriceQuarter;
+    } else {
+      fracPrice = Math.round(0.75 * basePrice);
+    }
+  } else {
+    fracPrice = Math.round(frac * basePrice);
+  }
+
+  return Math.round(wholePrice + fracPrice);
+}

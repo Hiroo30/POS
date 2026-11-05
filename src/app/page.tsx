@@ -10,8 +10,10 @@ import CheckoutModal from "@/components/CheckoutModal";
 import ReceiptModal from "@/components/ReceiptModal";
 import CashDrawerModal from "@/components/CashDrawerModal";
 import ExpenseModal from "@/components/ExpenseModal";
+import ShiftCloseModal from "@/components/ShiftCloseModal";
 import { deviceFetch, getDeviceId, getDeviceLabel } from "@/lib/device";
 import { playBeep, playAlertSound } from "@/lib/audio";
+import { calculateProductBaseSubtotal, hasCustomDecimalPrices } from "@/lib/formatters";
 
 interface SummaryData {
   totalItems: number;
@@ -20,7 +22,8 @@ interface SummaryData {
   totalAssetValue: number;
   totalPotentialRevenue: number;
   todaySales: number;
-  todayRevenue: number;
+  todayRevenue?: number;
+  todayOrderCount?: number;
   todayProfit: number;
   todayExpenses?: number;
   todayNetProfit?: number;
@@ -53,6 +56,8 @@ export default function PosPage() {
   const [cashDrawerAmount, setCashDrawerAmount] = useState<number>(0);
   const [showCashDrawerModal, setShowCashDrawerModal] = useState<boolean>(false);
   const [showExpenseModal, setShowExpenseModal] = useState<boolean>(false);
+  const [showShiftCloseModal, setShowShiftCloseModal] = useState<boolean>(false);
+  const [isSeeding, setIsSeeding] = useState<boolean>(false);
 
   // Load per-device cart, customers & cash drawer on mount
   useEffect(() => {
@@ -184,7 +189,31 @@ export default function PosPage() {
       const prodData = await prodRes.json();
       const sumData = await sumRes.json();
       const custData = await custRes.json();
-      if (prodData.success) setProducts(prodData.data);
+      if (prodData.success) {
+        const fetchedProducts: Product[] = prodData.data;
+        setProducts(fetchedProducts);
+        // Sinkronkan produk & subtotal di keranjang jika ada perubahan harga desimal di stok
+        setCart((prevCart) =>
+          prevCart.map((it) => {
+            const latest = fetchedProducts.find((p) => p.id === it.product.id);
+            if (!latest) return it;
+            const pricePerUnit =
+              it.unitUsed === "PACK" && latest.hasMultiUnit && latest.sellPricePack
+                ? latest.sellPricePack
+                : latest.sellPrice;
+            const subtotal =
+              it.unitUsed === "BASE"
+                ? calculateProductBaseSubtotal(latest, it.quantity, pricePerUnit)
+                : Math.round(it.quantity * pricePerUnit);
+            return {
+              ...it,
+              product: latest,
+              pricePerUnit,
+              subtotal,
+            };
+          })
+        );
+      }
       if (sumData.success) setSummary(sumData.data);
       if (custData.success && Array.isArray(custData.data)) {
         setCustomerRecords(custData.data);
@@ -230,24 +259,36 @@ export default function PosPage() {
     return counts;
   }, [products]);
 
-  const handleAddToCart = (product: Product, unitUsed: "BASE" | "PACK") => {
-    const conversion = product.hasMultiUnit && product.packConversion && product.packConversion > 1 ? product.packConversion : 1;
-    const addInBase = unitUsed === "PACK" ? conversion : 1;
+  const handleAddToCart = (
+    product: Product,
+    unitUsed: "BASE" | "PACK",
+    customQty = 1
+  ) => {
+    const qtyToAdd = Math.round((customQty > 0 ? customQty : 1) * 100) / 100;
+    const conversion =
+      product.hasMultiUnit && product.packConversion && product.packConversion > 1
+        ? product.packConversion
+        : 1;
+    const addInBase =
+      Math.round((unitUsed === "PACK" ? qtyToAdd * conversion : qtyToAdd) * 100) / 100;
 
     // Check existing quantity in base units across all cart items for this product
     const currentBaseInCart = cart
       .filter((it) => it.product.id === product.id)
       .reduce((sum, it) => {
-        const itemConv = it.product.hasMultiUnit && it.product.packConversion ? it.product.packConversion : 1;
+        const itemConv =
+          it.product.hasMultiUnit && it.product.packConversion
+            ? it.product.packConversion
+            : 1;
         return sum + (it.unitUsed === "PACK" ? it.quantity * itemConv : it.quantity);
       }, 0);
 
-    if (currentBaseInCart + addInBase > product.stockInBase) {
+    if (Math.round((currentBaseInCart + addInBase) * 100) / 100 > product.stockInBase) {
       playAlertSound();
       const packUnitName = product.packUnit || "Dus";
       if (unitUsed === "PACK") {
         alert(
-          `Stok tidak mencukupi untuk 1 ${packUnitName}! Sisa stok fisik di toko adalah ${product.stockInBase} ${product.baseUnit} (butuh ${conversion} ${product.baseUnit}).`
+          `Stok tidak mencukupi untuk ${qtyToAdd} ${packUnitName}! Sisa stok fisik di toko adalah ${product.stockInBase} ${product.baseUnit} (butuh ${addInBase} ${product.baseUnit}).`
         );
       } else {
         alert(
@@ -268,24 +309,48 @@ export default function PosPage() {
           : product.sellPrice;
       if (existingIndex > -1) {
         const updated = [...prev];
-        const newQty = updated[existingIndex].quantity + 1;
-        updated[existingIndex] = { ...updated[existingIndex], quantity: newQty, subtotal: newQty * pricePerUnit };
+        const newQty = Math.round((updated[existingIndex].quantity + qtyToAdd) * 100) / 100;
+        const newSubtotal =
+          unitUsed === "BASE"
+            ? calculateProductBaseSubtotal(product, newQty, pricePerUnit)
+            : Math.round(newQty * pricePerUnit);
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          product,
+          quantity: newQty,
+          pricePerUnit,
+          subtotal: newSubtotal,
+        };
         return updated;
       } else {
-        return [...prev, { product, quantity: 1, unitUsed, pricePerUnit, subtotal: pricePerUnit }];
+        const initialSubtotal =
+          unitUsed === "BASE"
+            ? calculateProductBaseSubtotal(product, qtyToAdd, pricePerUnit)
+            : Math.round(qtyToAdd * pricePerUnit);
+        return [
+          ...prev,
+          {
+            product,
+            quantity: qtyToAdd,
+            unitUsed,
+            pricePerUnit,
+            subtotal: initialSubtotal,
+          },
+        ];
       }
     });
   };
 
   const handleUpdateQuantity = (productId: string, unitUsed: "BASE" | "PACK", newQty: number) => {
-    if (newQty <= 0) {
+    const roundedQty = Math.round(newQty * 100) / 100;
+    if (roundedQty <= 0) {
       setCart((prev) => prev.filter((it) => !(it.product.id === productId && it.unitUsed === unitUsed)));
       return;
     }
 
     const item = cart.find((it) => it.product.id === productId && it.unitUsed === unitUsed);
-    if (item && newQty > item.quantity) {
-      const product = item.product;
+    if (item && roundedQty > item.quantity) {
+      const product = products.find((p) => p.id === productId) || item.product;
       const conversion = product.hasMultiUnit && product.packConversion ? product.packConversion : 1;
       const otherItemsBase = cart
         .filter((it) => it.product.id === productId && !(it.unitUsed === unitUsed))
@@ -293,7 +358,8 @@ export default function PosPage() {
           const itemConv = it.product.hasMultiUnit && it.product.packConversion ? it.product.packConversion : 1;
           return sum + (it.unitUsed === "PACK" ? it.quantity * itemConv : it.quantity);
         }, 0);
-      const targetBase = otherItemsBase + (unitUsed === "PACK" ? newQty * conversion : newQty);
+      const targetBase =
+        Math.round((otherItemsBase + (unitUsed === "PACK" ? roundedQty * conversion : roundedQty)) * 100) / 100;
       if (targetBase > product.stockInBase) {
         playAlertSound();
         alert(`Stok fisik ${product.name} tidak mencukupi untuk menambah item ini! (Tersedia ${product.stockInBase} ${product.baseUnit})`);
@@ -302,19 +368,33 @@ export default function PosPage() {
     }
 
     setCart((prev) =>
-      prev.map((it) =>
-        it.product.id === productId && it.unitUsed === unitUsed
-          ? { ...it, quantity: newQty, subtotal: newQty * it.pricePerUnit }
-          : it
-      )
+      prev.map((it) => {
+        if (it.product.id === productId && it.unitUsed === unitUsed) {
+          const latestProd = products.find((p) => p.id === productId) || it.product;
+          const newSubtotal =
+            unitUsed === "BASE"
+              ? calculateProductBaseSubtotal(latestProd, roundedQty, it.pricePerUnit)
+              : Math.round(roundedQty * it.pricePerUnit);
+          return {
+            ...it,
+            product: latestProd,
+            quantity: roundedQty,
+            subtotal: newSubtotal,
+          };
+        }
+        return it;
+      })
     );
   };
 
   const totalAmount = cart.reduce((s, it) => s + it.subtotal, 0);
-  const cartCount = cart.reduce((s, it) => s + it.quantity, 0);
+  const cartCount = Math.round(cart.reduce((s, it) => s + it.quantity, 0) * 100) / 100;
 
   const handleCheckoutSuccess = (sale: SaleTransaction) => {
     setLastSale(sale);
+    if (sale.paymentMethod === "TUNAI" && sale.totalAmount > 0) {
+      handleSaveCashDrawer(cashDrawerAmount + sale.totalAmount);
+    }
     setCart([]);
     try {
       if (deviceId) localStorage.removeItem(`pos_cart_${deviceId}`);
@@ -322,6 +402,25 @@ export default function PosPage() {
     setShowCheckout(false);
     setShowReceipt(true);
     loadData();
+  };
+
+  const handleSeedStarterProducts = async () => {
+    setIsSeeding(true);
+    try {
+      const res = await deviceFetch("/api/maintenance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "seed" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await loadData();
+      }
+    } catch (e) {
+      console.error("Gagal memuat produk contoh:", e);
+    } finally {
+      setIsSeeding(false);
+    }
   };
 
   const handleClearCart = () => {
@@ -407,6 +506,21 @@ export default function PosPage() {
             </span>
           </button>
 
+          {/* Tutup Shift & Setoran Kasir Pill */}
+          <button
+            type="button"
+            onClick={() => setShowShiftCloseModal(true)}
+            className="desktop-only flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 border border-slate-700 text-white transition-all cursor-pointer shadow-2xs"
+            title="Rekap Tutup Shift Kasir, Hitung Fisik Uang Laci & Kirim Laporan WA ke Owner"
+          >
+            <span className="material-symbols-outlined text-[15px] text-emerald-400">
+              fact_check
+            </span>
+            <span className="text-xs font-bold">
+              Tutup Shift
+            </span>
+          </button>
+
           {/* Time & Shift */}
           <div className="desktop-only" style={{fontSize: 11, color: "#64748b", fontWeight: 600}}>
             {timeStr} • Shift Pagi
@@ -482,7 +596,14 @@ export default function PosPage() {
                 <span className="material-symbols-outlined text-[15px] text-orange-600">payments</span>
                 <span>- Keluar</span>
               </button>
-              <span className="text-[11px] text-slate-500 font-medium">Shift 1</span>
+              <button
+                type="button"
+                onClick={() => setShowShiftCloseModal(true)}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-bold shadow-2xs cursor-pointer active:scale-95 transition-all"
+              >
+                <span className="material-symbols-outlined text-[15px] text-emerald-400">fact_check</span>
+                <span>Tutup Shift</span>
+              </button>
             </div>
             {/* Top Metrics Ribbon (Stitch Design: 4 KPIs) */}
             <div className="grid-3" style={{marginBottom: 10, gap: 10}}>
@@ -503,7 +624,7 @@ export default function PosPage() {
                     Transaksi Selesai
                   </div>
                   <div style={{fontSize: 16, fontWeight: 800, color: "#0f172a", marginTop: 2}}>
-                    {summary?.todaySales ?? 0} Nota
+                    {summary?.todayOrderCount ?? 0} Nota
                   </div>
                   <div style={{fontSize: 10, color: "#006c49", fontWeight: 700, marginTop: 2, display: "flex", alignItems: "center", gap: 3}}>
                     <span>Lihat Histori Struk</span>
@@ -531,7 +652,7 @@ export default function PosPage() {
                     Omzet Penjualan
                   </div>
                   <div style={{fontSize: 16, fontWeight: 800, color: "#006c49", marginTop: 2}}>
-                    {formatRupiah(summary?.todayRevenue ?? 0)}
+                    {formatRupiah(summary?.todayRevenue ?? summary?.todaySales ?? 0)}
                   </div>
                   <div style={{fontSize: 10, color: "#64748b", marginTop: 2}}>
                     Total kotor kasir
@@ -561,8 +682,8 @@ export default function PosPage() {
                     {formatRupiah(summary?.todayProfit ?? 0)}
                   </div>
                   <div style={{fontSize: 10, color: "#10b981", fontWeight: 600, marginTop: 2}}>
-                    {summary?.todayRevenue && summary.todayRevenue > 0
-                      ? `+${((summary.todayProfit / summary.todayRevenue) * 100).toFixed(1)}% net margin`
+                    {(summary?.todayRevenue ?? summary?.todaySales ?? 0) > 0
+                      ? `+${((summary!.todayProfit / (summary!.todayRevenue ?? summary!.todaySales)) * 100).toFixed(1)}% net margin`
                       : "0.0% net margin"}
                   </div>
                 </div>
@@ -737,21 +858,37 @@ export default function PosPage() {
                   <span className="material-symbols-outlined text-[36px]">inventory_2</span>
                 </div>
                 <div style={{fontSize: 16, fontWeight: 800, color: "#1e293b"}}>Katalog Toko Masih Kosong</div>
-                <div style={{fontSize: 12.5, color: "#64748b", marginTop: 4, maxWidth: 360, margin: "4px auto 16px"}}>
-                  Data mulai bersih dari nol. Silakan tambahkan barang jualan pertama Anda di menu Katalog & Stok.
+                <div style={{fontSize: 12.5, color: "#64748b", marginTop: 4, maxWidth: 380, margin: "4px auto 16px"}}>
+                  Data mulai bersih dari nol. Anda dapat langsung mengisi 15 produk sembako populer dengan 1 klik atau menambahkan barang sendiri.
                 </div>
-                <a
-                  href="/produk"
-                  style={{
-                    display: "inline-flex", alignItems: "center", gap: 6,
-                    padding: "9px 18px", borderRadius: 10, background: "#006c49",
-                    color: "#ffffff", fontSize: 13, fontWeight: 700, textDecoration: "none",
-                    boxShadow: "0 2px 8px rgba(0,108,73,0.25)"
-                  }}
-                >
-                  <span className="material-symbols-outlined text-[18px]">add_circle</span>
-                  <span>+ Tambah Produk ke Katalog</span>
-                </a>
+                <div style={{display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap"}}>
+                  <button
+                    type="button"
+                    disabled={isSeeding}
+                    onClick={handleSeedStarterProducts}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                      padding: "9px 18px", borderRadius: 10, background: "#006c49",
+                      color: "#ffffff", fontSize: 13, fontWeight: 700, border: "none", cursor: "pointer",
+                      boxShadow: "0 2px 8px rgba(0,108,73,0.25)"
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">bolt</span>
+                    <span>{isSeeding ? "Memuat Produk..." : "Isi Contoh Produk Sembako (15 Barang)"}</span>
+                  </button>
+                  <a
+                    href="/produk"
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                      padding: "9px 18px", borderRadius: 10, background: "#ffffff",
+                      color: "#006c49", fontSize: 13, fontWeight: 700, textDecoration: "none",
+                      border: "1.5px solid #006c49"
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">add_circle</span>
+                    <span>+ Tambah Produk Manual</span>
+                  </a>
+                </div>
               </div>
             ) : filteredProducts.length === 0 ? (
               <div style={{textAlign: "center", padding: 60, color: "#94a3b8"}}>
@@ -888,6 +1025,24 @@ export default function PosPage() {
                       </div>
                       <div className="kp-cart-item-price">
                         {new Intl.NumberFormat("id-ID").format(item.pricePerUnit)} × {item.quantity} {unitLabel}
+                        {item.unitUsed === "BASE" &&
+                        hasCustomDecimalPrices(item.product) &&
+                        item.quantity % 1 !== 0 ? (
+                          <span
+                            style={{
+                              display: "inline-block",
+                              fontSize: 9.5,
+                              color: "#006c49",
+                              background: "#dcfce7",
+                              padding: "0px 5px",
+                              borderRadius: 4,
+                              fontWeight: 700,
+                              marginLeft: 4,
+                            }}
+                          >
+                            ⚖️ Harga desimal stok
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                     <div style={{textAlign: "right", flexShrink: 0}}>
@@ -895,10 +1050,96 @@ export default function PosPage() {
                         {new Intl.NumberFormat("id-ID").format(item.subtotal)}
                       </div>
                       <div className="kp-cart-qty-control">
-                        <button className="kp-qty-btn" onClick={() => handleUpdateQuantity(item.product.id, item.unitUsed, item.quantity - 1)}>−</button>
-                        <span style={{fontSize: 12, fontWeight: 700, minWidth: 20, textAlign: "center"}}>{item.quantity}</span>
-                        <button className="kp-qty-btn" onClick={() => handleUpdateQuantity(item.product.id, item.unitUsed, item.quantity + 1)}>+</button>
+                        <button
+                          type="button"
+                          className="kp-qty-btn"
+                          onClick={() =>
+                            handleUpdateQuantity(
+                              item.product.id,
+                              item.unitUsed,
+                              Math.round((item.quantity - (item.quantity <= 1 ? 0.25 : 1)) * 100) / 100
+                            )
+                          }
+                        >
+                          −
+                        </button>
+                        <input
+                          type="number"
+                          step="0.25"
+                          min="0"
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            if (!isNaN(val)) {
+                              handleUpdateQuantity(item.product.id, item.unitUsed, val);
+                            }
+                          }}
+                          style={{
+                            width: 44,
+                            fontSize: 11.5,
+                            fontWeight: 800,
+                            textAlign: "center",
+                            border: "1px solid #cbd5e1",
+                            borderRadius: 5,
+                            padding: "1px 2px",
+                            color: "#0f172a",
+                            background: "#f8fafc",
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="kp-qty-btn"
+                          onClick={() =>
+                            handleUpdateQuantity(
+                              item.product.id,
+                              item.unitUsed,
+                              Math.round((item.quantity + 1) * 100) / 100
+                            )
+                          }
+                        >
+                          +
+                        </button>
                       </div>
+                      {item.unitUsed === "BASE" && (
+                        <div style={{ display: "flex", gap: 3, marginTop: 4, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                          {[
+                            { label: "1/4", val: 0.25, subPrice: item.product.sellPriceQuarter },
+                            { label: "1/2", val: 0.5, subPrice: item.product.sellPriceHalf },
+                            { label: "3/4", val: 0.75, subPrice: item.product.sellPriceThreeQuarter },
+                            { label: "1", val: 1 },
+                            { label: "+0.5", val: Math.round((item.quantity + 0.5) * 100) / 100, isAdd: true },
+                          ].map((q) => {
+                            const isActive = !q.isAdd && item.quantity === q.val;
+                            return (
+                              <button
+                                key={q.label}
+                                type="button"
+                                onClick={() => handleUpdateQuantity(item.product.id, item.unitUsed, q.val)}
+                                style={{
+                                  fontSize: 9.5,
+                                  fontWeight: 700,
+                                  padding: "1px 5px",
+                                  borderRadius: 4,
+                                  border: isActive ? "1px solid #006c49" : q.subPrice ? "1px solid #86efac" : "1px solid #e2e8f0",
+                                  background: isActive ? "#dcfce7" : q.subPrice ? "#f0fdf4" : "#f8fafc",
+                                  color: isActive ? "#006c49" : "#334155",
+                                }}
+                              >
+                                {q.label}
+                                {q.subPrice
+                                  ? ` (${
+                                      q.subPrice >= 1000
+                                        ? `${(q.subPrice / 1000).toLocaleString("id-ID", {
+                                            maximumFractionDigits: 1,
+                                          })}rb`
+                                        : q.subPrice
+                                    })`
+                                  : ""}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -961,6 +1202,13 @@ export default function PosPage() {
           }
           loadData();
         }}
+      />
+      <ShiftCloseModal
+        isOpen={showShiftCloseModal}
+        onClose={() => setShowShiftCloseModal(false)}
+        cashDrawerAmount={cashDrawerAmount}
+        onUpdateDrawer={handleSaveCashDrawer}
+        deviceLabel={deviceLabel || "Kasir POS"}
       />
 
       {/* Modal Tambah Pelanggan Baru */}

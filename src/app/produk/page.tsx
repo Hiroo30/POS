@@ -31,11 +31,32 @@ export default function ProdukPage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [formModalOpen, setFormModalOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
+  const [isSeeding, setIsSeeding] = useState(false);
   const [toast, setToast] = useState<{ text: string; type: "success" | "info" } | null>(null);
 
   const showToast = (text: string, type: "success" | "info" = "success") => {
     setToast({ text, type });
     setTimeout(() => setToast(null), 3500);
+  };
+
+  const handleSeedStarterProducts = async () => {
+    setIsSeeding(true);
+    try {
+      const res = await deviceFetch("/api/maintenance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "seed" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("15 produk sembako contoh berhasil dimuat!", "success");
+        await loadData();
+      }
+    } catch (err) {
+      console.error("Gagal memuat produk contoh:", err);
+    } finally {
+      setIsSeeding(false);
+    }
   };
 
   const loadData = async () => {
@@ -489,20 +510,35 @@ export default function ProdukPage() {
               <div>
                 <p className="text-base font-bold text-slate-800">Katalog Toko Masih Kosong</p>
                 <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
-                  Data mulai dari nol. Daftarkan komoditas atau produk sembako pertama Anda sekarang.
+                  Data mulai dari nol. Muat 15 produk sembako contoh secara instan atau daftarkan produk sendiri.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setProductToEdit(null);
-                  setFormModalOpen(true);
-                }}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-md transition-all cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[18px]">add_circle</span>
-                <span>+ Tambah Produk Pertama</span>
-              </button>
+              <div className="flex items-center justify-center gap-3 flex-wrap">
+                <button
+                  type="button"
+                  disabled={isSeeding}
+                  onClick={handleSeedStarterProducts}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-md transition-all cursor-pointer disabled:opacity-60"
+                >
+                  <span className="material-symbols-outlined text-[18px]">bolt</span>
+                  <span>
+                    {isSeeding
+                      ? "Memuat Produk..."
+                      : "Isi Contoh Produk Sembako (15 Barang)"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProductToEdit(null);
+                    setFormModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-emerald-700 border border-emerald-600 text-xs font-bold transition-all cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">add_circle</span>
+                  <span>+ Tambah Produk Manual</span>
+                </button>
+              </div>
             </div>
           ) : filteredProducts.length === 0 ? (
             <div className="py-20 text-center text-slate-400 space-y-3">
@@ -621,8 +657,29 @@ export default function ProdukPage() {
                           </td>
 
                           {/* Harga Jual */}
-                          <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-700">
-                            {formatRupiah(p.sellPrice)}
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="font-mono font-bold text-emerald-700">
+                              {formatRupiah(p.sellPrice)}
+                            </div>
+                            {(p.sellPriceQuarter || p.sellPriceHalf || p.sellPriceThreeQuarter) && (
+                              <div className="mt-1 flex flex-wrap justify-end gap-1">
+                                {p.sellPriceQuarter ? (
+                                  <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 font-mono text-[10px] font-semibold">
+                                    1/4: {formatRupiah(p.sellPriceQuarter)}
+                                  </span>
+                                ) : null}
+                                {p.sellPriceHalf ? (
+                                  <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 font-mono text-[10px] font-semibold">
+                                    1/2: {formatRupiah(p.sellPriceHalf)}
+                                  </span>
+                                ) : null}
+                                {p.sellPriceThreeQuarter ? (
+                                  <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 font-mono text-[10px] font-semibold">
+                                    3/4: {formatRupiah(p.sellPriceThreeQuarter)}
+                                  </span>
+                                ) : null}
+                              </div>
+                            )}
                           </td>
 
                           {/* Margin Untung */}
@@ -810,6 +867,22 @@ export default function ProdukPage() {
                           </span>
                           <span className="font-mono font-bold">
                             {p.sellPricePack ? formatRupiah(p.sellPricePack) : "-"}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Custom decimal prices strip if exists */}
+                      {(p.sellPriceQuarter || p.sellPriceHalf || p.sellPriceThreeQuarter) && (
+                        <div className="mt-2 px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-800 text-[10.5px] font-semibold flex flex-wrap items-center justify-between gap-1">
+                          <span className="font-bold">⚖️ Ecer Desimal:</span>
+                          <span className="font-mono">
+                            {[
+                              p.sellPriceQuarter ? `1/4: ${formatRupiah(p.sellPriceQuarter)}` : null,
+                              p.sellPriceHalf ? `1/2: ${formatRupiah(p.sellPriceHalf)}` : null,
+                              p.sellPriceThreeQuarter ? `3/4: ${formatRupiah(p.sellPriceThreeQuarter)}` : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" • ")}
                           </span>
                         </div>
                       )}

@@ -37,6 +37,9 @@ export interface Product {
   minStockInBase: number; // Batas minimum peringatan stok menipis
   costPrice: number; // Harga modal per satuan dasar
   sellPrice: number; // Harga jual per satuan dasar
+  sellPriceQuarter?: number; // Harga jual kustom untuk 0.25 / 1/4 satuan dasar
+  sellPriceHalf?: number; // Harga jual kustom untuk 0.5 / 1/2 satuan dasar
+  sellPriceThreeQuarter?: number; // Harga jual kustom untuk 0.75 / 3/4 satuan dasar
   costPricePack?: number; // Harga modal per satuan dus/karton
   sellPricePack?: number; // Harga jual per satuan dus/karton
   imageUrl?: string;
@@ -128,6 +131,7 @@ export interface SaleTransaction {
   customerId?: string;
   pointsEarned?: number;
   pointsRedeemed?: number;
+  discountAmount?: number;
   cashierName?: string;
   notes?: string;
   createdAt: string;
@@ -142,6 +146,7 @@ export interface CreateSaleInput {
   notes?: string;
   dueDate?: string; // Untuk Kasbon
   pointsRedeemed?: number;
+  discountAmount?: number;
 }
 
 export interface KasbonRecord {
@@ -167,6 +172,7 @@ export interface StoreSummary {
   totalAssetValue: number; // Total modal barang di toko
   totalPotentialRevenue: number; // Nilai jual seluruh stok
   todaySales: number; // Total omzet penjualan hari ini
+  todayRevenue?: number; // Alias omzet penjualan hari ini untuk konsistensi UI
   todayProfit: number; // Laba kotor hari ini
   todayOrderCount: number; // Jumlah nota/transaksi hari ini
   totalKasbon: number; // Total piutang kasbon belum lunas

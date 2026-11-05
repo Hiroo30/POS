@@ -29,6 +29,12 @@ export default function ReceiptModal({ sale, onClose }: Props) {
         (it) => `${it.productName}\n  ${it.quantity} ${it.unitLabel} x ${formatRupiah(it.pricePerUnit)} = ${formatRupiah(it.subtotal)}`
       ),
       `--------------------------------`,
+      ...(sale.discountAmount && sale.discountAmount > 0
+        ? [
+            `Subtotal: ${formatRupiah(sale.totalAmount + sale.discountAmount)}`,
+            `Potongan/Diskon: -${formatRupiah(sale.discountAmount)}`,
+          ]
+        : []),
       `*TOTAL : ${formatRupiah(sale.totalAmount)}*`,
       `Metode: ${sale.paymentMethod}`,
       ...(sale.paymentMethod === "TUNAI"
@@ -109,6 +115,18 @@ export default function ReceiptModal({ sale, onClose }: Props) {
 
           {/* Totals */}
           <div style={{fontSize:11}}>
+            {sale.discountAmount && sale.discountAmount > 0 ? (
+              <>
+                <div style={{display:"flex", justifyContent:"space-between", color:"#64748b", marginBottom:2}}>
+                  <span>Subtotal Belanja</span>
+                  <span>{formatRupiah(sale.totalAmount + sale.discountAmount)}</span>
+                </div>
+                <div style={{display:"flex", justifyContent:"space-between", color:"#dc2626", fontWeight:700, marginBottom:4}}>
+                  <span>Total Diskon / Potongan</span>
+                  <span>-{formatRupiah(sale.discountAmount)}</span>
+                </div>
+              </>
+            ) : null}
             <div style={{display:"flex", justifyContent:"space-between", fontWeight:900, fontSize:13, marginBottom:4}}>
               <span>TOTAL BELANJA</span>
               <span style={{color:"#16a34a"}}>{formatRupiah(sale.totalAmount)}</span>

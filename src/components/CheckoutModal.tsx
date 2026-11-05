@@ -45,6 +45,7 @@ export default function CheckoutModal({
       : ""
   );
   const [redeemPoints, setRedeemPoints] = useState(0);
+  const [manualDiscountInput, setManualDiscountInput] = useState("");
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -52,11 +53,30 @@ export default function CheckoutModal({
 
   // 10 poin = Diskon Rp 5.000
   const pointsDiscount = redeemPoints > 0 ? (redeemPoints / 10) * 5000 : 0;
-  const finalTotal = Math.max(0, totalAmount - pointsDiscount);
+  const afterPointsTotal = Math.max(0, totalAmount - pointsDiscount);
+  const manualDiscount = Math.min(
+    afterPointsTotal,
+    Math.max(0, parseInt(manualDiscountInput.replace(/\D/g, ""), 10) || 0)
+  );
+  const totalDiscount = pointsDiscount + manualDiscount;
+  const finalTotal = Math.max(0, totalAmount - totalDiscount);
   const pointsEarned = Math.floor(finalTotal / 10000);
 
   const cashAmount = parseInt(cashInput.replace(/\D/g, "")) || 0;
   const change = paymentMethod === "TUNAI" ? cashAmount - finalTotal : 0;
+
+  const handleRoundTotal = () => {
+    const rem1000 = afterPointsTotal % 1000;
+    if (rem1000 > 0) {
+      setManualDiscountInput(String(rem1000));
+      return;
+    }
+    const rem5000 = afterPointsTotal % 5000;
+    if (rem5000 > 0) {
+      setManualDiscountInput(String(rem5000));
+      return;
+    }
+  };
 
   const handleNumpad = (val: string) => {
     if (val === "C") { setCashInput(""); return; }
@@ -96,6 +116,7 @@ export default function CheckoutModal({
           notes: notes.trim() || undefined,
           dueDate: paymentMethod === "KASBON" ? dueDate : undefined,
           pointsRedeemed: redeemPoints > 0 ? redeemPoints : undefined,
+          discountAmount: manualDiscount > 0 ? manualDiscount : undefined,
         }),
       });
       const data = await res.json();
@@ -123,7 +144,7 @@ export default function CheckoutModal({
             <div style={{display:"flex", alignItems:"baseline", gap:8}}>
               <span style={{fontSize:11, color:"#86efac"}}>Tagihan:</span>
               <span style={{fontSize:26, fontWeight:900, color:"#fff"}}>{formatRupiah(finalTotal)}</span>
-              {pointsDiscount > 0 && (
+              {totalDiscount > 0 && (
                 <span style={{fontSize:12, textDecoration:"line-through", color:"rgba(255,255,255,0.6)"}}>
                   {formatRupiah(totalAmount)}
                 </span>
@@ -159,7 +180,7 @@ export default function CheckoutModal({
               border: "1px solid #bbf7d0",
               borderRadius: 10,
               padding: "10px 12px",
-              marginBottom: 14,
+              marginBottom: 12,
             }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                 <span style={{ fontSize: 11, fontWeight: 800, color: "#166534", display: "flex", alignItems: "center", gap: 5 }}>
@@ -254,6 +275,99 @@ export default function CheckoutModal({
               )}
             </div>
 
+            {/* Potongan Diskon Manual / Pembulatan Nota */}
+            <div style={{
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              borderRadius: 10,
+              padding: "10px 12px",
+              marginBottom: 14,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: "#334155", display: "flex", alignItems: "center", gap: 5 }}>
+                  <span>🏷️</span> POTONGAN DISKON / PEMBULATAN NOTA (OPSIONAL)
+                </span>
+                {manualDiscount > 0 && (
+                  <span style={{ fontSize: 10.5, fontWeight: 800, color: "#dc2626", background: "#fee2e2", padding: "1px 7px", borderRadius: 10 }}>
+                    -{formatRupiah(manualDiscount)}
+                  </span>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+                <div style={{ position: "relative", flex: 1 }}>
+                  <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 11, fontWeight: 700, color: "#64748b" }}>
+                    -Rp
+                  </span>
+                  <input
+                    className="kp-input"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Nominal potongan (cth: 1000)"
+                    value={manualDiscountInput}
+                    onChange={(e) => setManualDiscountInput(e.target.value.replace(/\D/g, ""))}
+                    style={{ background: "#ffffff", fontSize: 12, fontWeight: 700, padding: "6px 10px 6px 34px" }}
+                  />
+                </div>
+                {manualDiscount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setManualDiscountInput("")}
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: 6,
+                      border: "1px solid #cbd5e1",
+                      background: "#ffffff",
+                      color: "#64748b",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {(afterPointsTotal % 1000 > 0 || afterPointsTotal % 5000 > 0) && (
+                  <button
+                    type="button"
+                    onClick={handleRoundTotal}
+                    style={{
+                      padding: "3px 8px",
+                      borderRadius: 6,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      background: "#fef3c7",
+                      color: "#b45309",
+                      border: "1px solid #fde68a",
+                    }}
+                  >
+                    ✨ Bulatkan Nota (-{formatRupiah(afterPointsTotal % 1000 > 0 ? afterPointsTotal % 1000 : afterPointsTotal % 5000)})
+                  </button>
+                )}
+                {[1000, 2000, 5000].map((disc) => (
+                  <button
+                    key={disc}
+                    type="button"
+                    onClick={() => setManualDiscountInput(String(disc))}
+                    style={{
+                      padding: "3px 8px",
+                      borderRadius: 6,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      background: manualDiscount === disc ? "#dc2626" : "#ffffff",
+                      color: manualDiscount === disc ? "#ffffff" : "#475569",
+                      border: `1px solid ${manualDiscount === disc ? "#dc2626" : "#cbd5e1"}`,
+                    }}
+                  >
+                    -Rp {disc.toLocaleString("id-ID")}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Payment methods */}
             <div style={{marginBottom:14}}>
               <div className="kp-label">Metode Pembayaran</div>
@@ -305,7 +419,6 @@ export default function CheckoutModal({
                 {/* Quick amounts */}
                 <div style={{display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:6, marginBottom:10}}>
                   {QUICK_AMOUNTS.map((amt) => {
-                    const label = amt >= 1000 ? `${amt/1000}rb` : String(amt);
                     const need = Math.ceil(finalTotal / amt) * amt;
                     return (
                       <button

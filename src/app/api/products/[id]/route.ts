@@ -46,6 +46,14 @@ export async function PUT(
       minStockInBase: body.minStockInBase !== undefined ? Number(body.minStockInBase) : undefined,
       costPrice: body.costPrice !== undefined ? Number(body.costPrice) : undefined,
       sellPrice: body.sellPrice !== undefined ? Number(body.sellPrice) : undefined,
+      sellPriceQuarter:
+        body.sellPriceQuarter !== undefined ? Number(body.sellPriceQuarter) || 0 : undefined,
+      sellPriceHalf:
+        body.sellPriceHalf !== undefined ? Number(body.sellPriceHalf) || 0 : undefined,
+      sellPriceThreeQuarter:
+        body.sellPriceThreeQuarter !== undefined
+          ? Number(body.sellPriceThreeQuarter) || 0
+          : undefined,
       costPricePack: body.costPricePack !== undefined ? Number(body.costPricePack) : undefined,
       sellPricePack: body.sellPricePack !== undefined ? Number(body.sellPricePack) : undefined,
     }, deviceId);

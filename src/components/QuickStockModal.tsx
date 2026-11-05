@@ -26,12 +26,25 @@ export default function QuickStockModal({ product, mode, isOpen, onClose, onSucc
   const [note, setNote] = useState("");
   const [updateCostPrice, setUpdateCostPrice] = useState(false);
   const [newCostPrice, setNewCostPrice] = useState("");
+  const [updateSellPrices, setUpdateSellPrices] = useState(false);
+  const [newSellPrice, setNewSellPrice] = useState("");
+  const [sellPriceQuarter, setSellPriceQuarter] = useState("");
+  const [sellPriceHalf, setSellPriceHalf] = useState("");
+  const [sellPriceThreeQuarter, setSellPriceThreeQuarter] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     if (!product) return;
     setErrorMessage("");
+    setUpdateCostPrice(false);
+    setUpdateSellPrices(false);
+    setNewSellPrice(product.sellPrice ? product.sellPrice.toString() : "");
+    setSellPriceQuarter(product.sellPriceQuarter ? product.sellPriceQuarter.toString() : "");
+    setSellPriceHalf(product.sellPriceHalf ? product.sellPriceHalf.toString() : "");
+    setSellPriceThreeQuarter(
+      product.sellPriceThreeQuarter ? product.sellPriceThreeQuarter.toString() : ""
+    );
     if (mode === "IN" && product.hasMultiUnit && product.packUnit) {
       setUnitUsed("PACK");
       setNote("Kulakan dari Agen");
@@ -59,6 +72,15 @@ export default function QuickStockModal({ product, mode, isOpen, onClose, onSucc
   const conversion = product.hasMultiUnit && product.packConversion ? product.packConversion : 1;
   const totalBaseQty = isPack ? numQty * conversion : numQty;
 
+  const handleAutoFillDecimal = () => {
+    const base = parseFloat(newSellPrice) || product.sellPrice || 0;
+    if (base <= 0) return;
+    const round500 = (n: number) => Math.ceil(n / 500) * 500;
+    setSellPriceQuarter(round500(base * 0.25).toString());
+    setSellPriceHalf(round500(base * 0.5).toString());
+    setSellPriceThreeQuarter(round500(base * 0.75).toString());
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (numQty <= 0 && mode !== "ADJUST") {
@@ -78,6 +100,25 @@ export default function QuickStockModal({ product, mode, isOpen, onClose, onSucc
           quantityInput: numQty,
           note: note.trim(),
           newCostPrice: updateCostPrice && newCostPrice ? parseFloat(newCostPrice) : undefined,
+          newSellPrice:
+            updateSellPrices && parseFloat(newSellPrice) > 0
+              ? parseFloat(newSellPrice)
+              : undefined,
+          sellPriceQuarter: updateSellPrices
+            ? parseFloat(sellPriceQuarter) > 0
+              ? parseFloat(sellPriceQuarter)
+              : 0
+            : undefined,
+          sellPriceHalf: updateSellPrices
+            ? parseFloat(sellPriceHalf) > 0
+              ? parseFloat(sellPriceHalf)
+              : 0
+            : undefined,
+          sellPriceThreeQuarter: updateSellPrices
+            ? parseFloat(sellPriceThreeQuarter) > 0
+              ? parseFloat(sellPriceThreeQuarter)
+              : 0
+            : undefined,
         }),
       });
       const data = await res.json();
@@ -155,7 +196,7 @@ export default function QuickStockModal({ product, mode, isOpen, onClose, onSucc
                 className="kp-input"
                 type="number"
                 min="0"
-                step="0.5"
+                step="0.25"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
               />
@@ -230,6 +271,103 @@ export default function QuickStockModal({ product, mode, isOpen, onClose, onSucc
                 )}
               </div>
             )}
+
+            {/* Update sell price & custom decimal prices */}
+            <div className="kp-form-group" style={{background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, padding:"10px 12px"}}>
+              <label style={{display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:12, fontWeight:700, color:"#166534"}}>
+                <input
+                  type="checkbox"
+                  checked={updateSellPrices}
+                  onChange={(e) => setUpdateSellPrices(e.target.checked)}
+                />
+                ⚖️ Atur / Ubah Harga Jual & Harga Desimal (1/4, 1/2, 3/4)
+              </label>
+
+              {!updateSellPrices && (product.sellPriceQuarter || product.sellPriceHalf || product.sellPriceThreeQuarter) && (
+                <div style={{fontSize:10.5, color:"#15803d", marginTop:4, paddingLeft:22}}>
+                  Saat ini:{" "}
+                  {product.sellPriceQuarter ? `1/4: ${formatRupiah(product.sellPriceQuarter)} ` : ""}
+                  {product.sellPriceHalf ? `• 1/2: ${formatRupiah(product.sellPriceHalf)} ` : ""}
+                  {product.sellPriceThreeQuarter ? `• 3/4: ${formatRupiah(product.sellPriceThreeQuarter)}` : ""}
+                </div>
+              )}
+
+              {updateSellPrices && (
+                <div style={{marginTop:10, display:"flex", flexDirection:"column", gap:8}}>
+                  <div style={{display:"flex", alignItems:"flex-end", justifyContent:"space-between", gap:8}}>
+                    <div style={{flex:1}}>
+                      <label className="kp-label" style={{fontSize:11}}>
+                        Harga Jual Eceran / 1 {product.baseUnit} (Rp)
+                      </label>
+                      <input
+                        className="kp-input"
+                        type="number"
+                        min="0"
+                        value={newSellPrice}
+                        onChange={(e) => setNewSellPrice(e.target.value)}
+                        style={{background:"#ffffff", fontWeight:700, color:"#16a34a"}}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAutoFillDecimal}
+                      style={{
+                        background:"#ffffff", border:"1px solid #86efac", color:"#15803d",
+                        borderRadius:6, fontSize:10.5, fontWeight:700, padding:"8px 10px", cursor:"pointer",
+                        whiteSpace:"nowrap"
+                      }}
+                    >
+                      ✨ Isi Saran Desimal
+                    </button>
+                  </div>
+
+                  <div style={{display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:6}}>
+                    <div>
+                      <label className="kp-label" style={{fontSize:10}}>
+                        1/4 (0.25 {product.baseUnit})
+                      </label>
+                      <input
+                        className="kp-input"
+                        type="number"
+                        min="0"
+                        placeholder="Rp..."
+                        value={sellPriceQuarter}
+                        onChange={(e) => setSellPriceQuarter(e.target.value)}
+                        style={{background:"#ffffff", fontSize:11.5, padding:"6px 8px"}}
+                      />
+                    </div>
+                    <div>
+                      <label className="kp-label" style={{fontSize:10}}>
+                        1/2 (0.5 {product.baseUnit})
+                      </label>
+                      <input
+                        className="kp-input"
+                        type="number"
+                        min="0"
+                        placeholder="Rp..."
+                        value={sellPriceHalf}
+                        onChange={(e) => setSellPriceHalf(e.target.value)}
+                        style={{background:"#ffffff", fontSize:11.5, padding:"6px 8px"}}
+                      />
+                    </div>
+                    <div>
+                      <label className="kp-label" style={{fontSize:10}}>
+                        3/4 (0.75 {product.baseUnit})
+                      </label>
+                      <input
+                        className="kp-input"
+                        type="number"
+                        min="0"
+                        placeholder="Rp..."
+                        value={sellPriceThreeQuarter}
+                        onChange={(e) => setSellPriceThreeQuarter(e.target.value)}
+                        style={{background:"#ffffff", fontSize:11.5, padding:"6px 8px"}}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div style={{padding:"0 20px 20px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:8}}>
