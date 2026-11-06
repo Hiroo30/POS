@@ -191,3 +191,41 @@ export interface CategoryInfo {
   border: string;
   accent: string;
 }
+
+export interface ShiftCloseRecord {
+  id: string;
+  closedAt: string;
+  cashierName: string;
+  deviceLabel: string;
+  orderCount: number;
+  tunai: number;
+  qris: number;
+  transfer: number;
+  kasbon: number;
+  totalRevenue: number;
+  drawerExpenses: number;
+  totalExpenses: number;
+  netProfit: number;
+  systemCashDrawer: number;
+  actualCashDrawer: number;
+  cashDifference: number;
+  notes?: string;
+}
+
+export interface CreateShiftCloseInput {
+  cashierName?: string;
+  deviceLabel?: string;
+  orderCount: number;
+  tunai: number;
+  qris: number;
+  transfer: number;
+  kasbon: number;
+  totalRevenue: number;
+  drawerExpenses: number;
+  totalExpenses: number;
+  netProfit: number;
+  systemCashDrawer: number;
+  actualCashDrawer: number;
+  cashDifference: number;
+  notes?: string;
+}

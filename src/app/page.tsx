@@ -578,20 +578,22 @@ export default function PosPage() {
             </div>
 
             {/* Mobile Cash Drawer & Expense Bar */}
-            <div className="mobile-only flex items-center justify-between mb-3 px-0.5 gap-2">
+            <div className="mobile-only flex items-center gap-1.5 mb-3">
               <button
                 type="button"
                 onClick={() => setShowCashDrawerModal(true)}
-                className="flex-1 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold shadow-2xs cursor-pointer active:scale-95 transition-all"
+                className="flex-1 min-w-0 flex items-center justify-between gap-1 px-2.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-semibold shadow-2xs cursor-pointer active:scale-95 transition-all"
               >
-                <span className="material-symbols-outlined text-[16px] text-emerald-700">payments</span>
-                <span>Laci: <strong className="text-emerald-700">{formatRupiah(cashDrawerAmount)}</strong></span>
-                <span className="material-symbols-outlined text-[13px] text-emerald-600">edit</span>
+                <div className="flex items-center gap-1 min-w-0">
+                  <span className="material-symbols-outlined text-[15px] text-emerald-700 shrink-0">payments</span>
+                  <span className="truncate">Laci: <strong className="text-emerald-700">{formatRupiah(cashDrawerAmount)}</strong></span>
+                </div>
+                <span className="material-symbols-outlined text-[13px] text-emerald-600 shrink-0">edit</span>
               </button>
               <button
                 type="button"
                 onClick={() => setShowExpenseModal(true)}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-orange-50 border border-orange-200 text-orange-800 text-xs font-bold shadow-2xs cursor-pointer active:scale-95 transition-all"
+                className="shrink-0 flex items-center gap-1 px-2.5 py-2 rounded-xl bg-orange-50 border border-orange-200 text-orange-800 text-[11px] font-bold shadow-2xs cursor-pointer active:scale-95 transition-all whitespace-nowrap"
               >
                 <span className="material-symbols-outlined text-[15px] text-orange-600">payments</span>
                 <span>- Keluar</span>
@@ -599,7 +601,7 @@ export default function PosPage() {
               <button
                 type="button"
                 onClick={() => setShowShiftCloseModal(true)}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-bold shadow-2xs cursor-pointer active:scale-95 transition-all"
+                className="shrink-0 flex items-center gap-1 px-2.5 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-[11px] font-bold shadow-2xs cursor-pointer active:scale-95 transition-all whitespace-nowrap"
               >
                 <span className="material-symbols-outlined text-[15px] text-emerald-400">fact_check</span>
                 <span>Tutup Shift</span>

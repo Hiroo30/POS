@@ -13,6 +13,8 @@ import {
   Customer,
   StoreExpense,
   ExpenseCategory,
+  ShiftCloseRecord,
+  CreateShiftCloseInput,
 } from "./types";
 import {
   INITIAL_PRODUCTS,
@@ -31,6 +33,7 @@ export interface DatabaseSchema {
   kasbon: KasbonRecord[];
   customers?: Customer[];
   expenses?: StoreExpense[];
+  shifts?: ShiftCloseRecord[];
   lastBackupDate?: string;
 }
 
@@ -191,6 +194,7 @@ function createInitialState(): DatabaseSchema {
         createdAt: new Date().toISOString(),
       },
     ],
+    shifts: [],
     lastBackupDate: new Date().toISOString(),
   };
 }
@@ -245,6 +249,7 @@ function readLocalDb(deviceId: string): DatabaseSchema {
     if (!parsed.kasbon) parsed.kasbon = [];
     if (!parsed.customers) parsed.customers = createInitialState().customers;
     if (!parsed.expenses) parsed.expenses = createInitialState().expenses;
+    if (!parsed.shifts) parsed.shifts = [];
     memDbByDevice[normId] = parsed;
     return parsed;
   } catch {
@@ -339,14 +344,16 @@ export async function getDbState(deviceId?: string): Promise<DatabaseSchema> {
       const kKey = `sembako:kasbon:${normId}`;
       const cKey = `sembako:customers:${normId}`;
       const eKey = `sembako:expenses:${normId}`;
+      const shKey = `sembako:shifts:${normId}`;
 
-      const [products, transactions, sales, kasbon, customers, expenses] = await Promise.all([
+      const [products, transactions, sales, kasbon, customers, expenses, shifts] = await Promise.all([
         redis.get<Product[]>(pKey),
         redis.get<Transaction[]>(tKey),
         redis.get<SaleTransaction[]>(sKey),
         redis.get<KasbonRecord[]>(kKey),
         redis.get<Customer[]>(cKey),
         redis.get<StoreExpense[]>(eKey),
+        redis.get<ShiftCloseRecord[]>(shKey),
       ]);
       if (products !== null && products !== undefined) {
         const cleanedProducts = cleanMockSeedProducts(products);
@@ -358,6 +365,7 @@ export async function getDbState(deviceId?: string): Promise<DatabaseSchema> {
           kasbon: kasbon || [],
           customers: customers && Array.isArray(customers) ? customers : initial.customers,
           expenses: expenses && Array.isArray(expenses) ? expenses : initial.expenses,
+          shifts: shifts && Array.isArray(shifts) ? shifts : [],
           lastBackupDate: new Date().toISOString(),
         };
       } else {
@@ -370,6 +378,7 @@ export async function getDbState(deviceId?: string): Promise<DatabaseSchema> {
           redis.set(kKey, initial.kasbon),
           redis.set(cKey, initial.customers || []),
           redis.set(eKey, initial.expenses || []),
+          redis.set(shKey, initial.shifts || []),
         ]);
         return initial;
       }
@@ -396,6 +405,7 @@ export async function saveDbState(data: DatabaseSchema, deviceId?: string): Prom
       const kKey = `sembako:kasbon:${normId}`;
       const cKey = `sembako:customers:${normId}`;
       const eKey = `sembako:expenses:${normId}`;
+      const shKey = `sembako:shifts:${normId}`;
 
       await Promise.all([
         redis.set(pKey, data.products),
@@ -404,6 +414,7 @@ export async function saveDbState(data: DatabaseSchema, deviceId?: string): Prom
         redis.set(kKey, data.kasbon || []),
         redis.set(cKey, data.customers || []),
         redis.set(eKey, data.expenses || []),
+        redis.set(shKey, data.shifts || []),
       ]);
       // Also update local mem/file for dev offline backup
       writeLocalDb(data, normId);
@@ -1278,6 +1289,65 @@ export async function redeemCustomerPoints(
   return { success: true, customer };
 }
 
+// ─── Shift Close Records (Riwayat Tutup Shift & Setoran Kasir) ────────────────
+
+export async function getShiftRecords(limit = 100, deviceId?: string): Promise<ShiftCloseRecord[]> {
+  const db = await getDbState(deviceId);
+  return (db.shifts || []).slice(0, limit);
+}
+
+export async function recordShiftClose(
+  input: CreateShiftCloseInput,
+  deviceId?: string
+): Promise<ShiftCloseRecord> {
+  const db = await getDbState(deviceId);
+  const newRecord: ShiftCloseRecord = {
+    id: `shift-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    closedAt: new Date().toISOString(),
+    cashierName: input.cashierName?.trim() || "Kasir Dewi",
+    deviceLabel: input.deviceLabel?.trim() || "Kasir POS",
+    orderCount: Math.max(0, Number(input.orderCount) || 0),
+    tunai: Number(input.tunai) || 0,
+    qris: Number(input.qris) || 0,
+    transfer: Number(input.transfer) || 0,
+    kasbon: Number(input.kasbon) || 0,
+    totalRevenue: Number(input.totalRevenue) || 0,
+    drawerExpenses: Number(input.drawerExpenses) || 0,
+    totalExpenses: Number(input.totalExpenses) || 0,
+    netProfit: Number(input.netProfit) || 0,
+    systemCashDrawer: Number(input.systemCashDrawer) || 0,
+    actualCashDrawer: Number(input.actualCashDrawer) || 0,
+    cashDifference: Number(input.cashDifference) || 0,
+    notes: input.notes?.trim() || undefined,
+  };
+
+  if (!db.shifts) db.shifts = [];
+  db.shifts.unshift(newRecord);
+  if (db.shifts.length > 500) {
+    db.shifts = db.shifts.slice(0, 500);
+  }
+  await saveDbState(db, deviceId);
+  return newRecord;
+}
+
+export async function deleteShiftRecord(id: string, deviceId?: string): Promise<boolean> {
+  const db = await getDbState(deviceId);
+  if (!db.shifts) return false;
+  const initialLen = db.shifts.length;
+  db.shifts = db.shifts.filter((s) => s.id !== id);
+  if (db.shifts.length !== initialLen) {
+    await saveDbState(db, deviceId);
+    return true;
+  }
+  return false;
+}
+
+export async function clearAllShiftRecords(deviceId?: string): Promise<void> {
+  const db = await getDbState(deviceId);
+  db.shifts = [];
+  await saveDbState(db, deviceId);
+}
+
 // ─── Maintenance ──────────────────────────────────────────────────────────────
 
 export async function seedStarterProducts(deviceId?: string): Promise<Product[]> {
@@ -1316,6 +1386,7 @@ export async function getRawDatabase(deviceId?: string): Promise<{
   kasbon: KasbonRecord[];
   customers: Customer[];
   expenses: StoreExpense[];
+  shifts: ShiftCloseRecord[];
   lastBackupDate?: string;
 }> {
   const db = await getDbState(deviceId);
@@ -1326,6 +1397,7 @@ export async function getRawDatabase(deviceId?: string): Promise<{
     kasbon: db.kasbon || [],
     customers: db.customers || [],
     expenses: db.expenses || [],
+    shifts: db.shifts || [],
     lastBackupDate: db.lastBackupDate || new Date().toISOString(),
   };
 }
@@ -1338,6 +1410,7 @@ export async function restoreDatabase(
     kasbon?: KasbonRecord[];
     customers?: Customer[];
     expenses?: StoreExpense[];
+    shifts?: ShiftCloseRecord[];
   },
   deviceId?: string
 ): Promise<boolean> {
@@ -1351,6 +1424,7 @@ export async function restoreDatabase(
     kasbon: Array.isArray(data.kasbon) ? data.kasbon : INITIAL_KASBON,
     customers: Array.isArray(data.customers) ? data.customers : initial.customers || [],
     expenses: Array.isArray(data.expenses) ? data.expenses : initial.expenses || [],
+    shifts: Array.isArray(data.shifts) ? data.shifts : [],
     lastBackupDate: new Date().toISOString(),
   };
 

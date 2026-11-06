@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import type { SaleTransaction, Transaction } from "@/lib/types";
+import type { SaleTransaction, Transaction, ShiftCloseRecord } from "@/lib/types";
 import { formatRupiah, formatDateTime } from "@/lib/formatters";
 import { deviceFetch } from "@/lib/device";
 import { getStoreSettings } from "@/lib/storeSettings";
 import Link from "next/link";
 
-type TabType = "SALES" | "MUTASI";
+type TabType = "SALES" | "MUTASI" | "SHIFTS";
 type DateFilter = "ALL" | "TODAY" | "YESTERDAY" | "WEEK" | "MONTH";
 type PaymentFilter = "ALL" | "TUNAI" | "QRIS" | "TRANSFER" | "KASBON";
 
@@ -17,8 +17,10 @@ export default function RiwayatPage() {
   // Data State
   const [sales, setSales] = useState<SaleTransaction[]>([]);
   const [mutasi, setMutasi] = useState<Transaction[]>([]);
+  const [shifts, setShifts] = useState<ShiftCloseRecord[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [selectedSale, setSelectedSale] = useState<SaleTransaction | null>(null);
+  const [selectedShift, setSelectedShift] = useState<ShiftCloseRecord | null>(null);
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -41,9 +43,11 @@ export default function RiwayatPage() {
   const [isVoiding, setIsVoiding] = useState<boolean>(false);
   const [showClearMutasiModal, setShowClearMutasiModal] = useState<boolean>(false);
   const [isClearingMutasi, setIsClearingMutasi] = useState<boolean>(false);
+  const [showClearShiftsModal, setShowClearShiftsModal] = useState<boolean>(false);
+  const [isClearingShifts, setIsClearingShifts] = useState<boolean>(false);
   const [feedbackMessage, setFeedbackMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
-  // Initialize date bounds on client mount to avoid SSR prerender issues
+  // Initialize date bounds and read ?tab= query param on client mount to avoid SSR prerender issues
   useEffect(() => {
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
@@ -58,24 +62,41 @@ export default function RiwayatPage() {
       weekAgoTime: weekAgo.getTime(),
       monthAgoTime: monthAgo.getTime(),
     });
+
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab")?.toUpperCase();
+      if (tabParam === "SHIFTS" || tabParam === "MUTASI" || tabParam === "SALES") {
+        setActiveTab(tabParam as TabType);
+      }
+    }
   }, []);
 
   // Load Data
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [salesRes, mutasiRes] = await Promise.all([
+      const [salesRes, mutasiRes, shiftsRes] = await Promise.all([
         deviceFetch("/api/sales?limit=250"),
         deviceFetch("/api/transactions?limit=250"),
+        deviceFetch("/api/shifts?limit=100"),
       ]);
       const salesData = await salesRes.json();
       const mutasiData = await mutasiRes.json();
+      const shiftsData = await shiftsRes.json();
 
       if (salesData.success) {
         setSales(salesData.data || []);
       }
       if (mutasiData.success) {
         setMutasi(mutasiData.data || []);
+      }
+      if (shiftsData.success) {
+        const list: ShiftCloseRecord[] = shiftsData.data || [];
+        setShifts(list);
+        if (list.length > 0 && !selectedShift) {
+          setSelectedShift(list[0]);
+        }
       }
     } catch (err) {
       console.error("Gagal memuat histori transaksi:", err);
@@ -259,6 +280,176 @@ export default function RiwayatPage() {
     }
   };
 
+  // Handle Delete Single Shift Record
+  const handleDeleteSingleShift = async (id: string) => {
+    try {
+      const res = await deviceFetch(`/api/shifts?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menghapus rekap tutup shift");
+      }
+      setShifts((prev) => {
+        const next = prev.filter((s) => s.id !== id);
+        if (selectedShift?.id === id) {
+          setSelectedShift(next[0] || null);
+        }
+        return next;
+      });
+      showFeedback("Catatan rekap tutup shift berhasil dihapus!", "success");
+    } catch (err: any) {
+      showFeedback(err.message || "Gagal menghapus rekap tutup shift.", "error");
+    }
+  };
+
+  // Handle Clear All Shift Records
+  const handleClearAllShifts = async () => {
+    setIsClearingShifts(true);
+    try {
+      const res = await deviceFetch("/api/shifts", { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal mengosongkan riwayat tutup shift");
+      }
+      setShifts([]);
+      setSelectedShift(null);
+      showFeedback("Seluruh riwayat tutup shift berhasil dikosongkan!", "success");
+    } catch (err: any) {
+      showFeedback(err.message || "Gagal mengosongkan riwayat tutup shift.", "error");
+    } finally {
+      setIsClearingShifts(false);
+      setShowClearShiftsModal(false);
+    }
+  };
+
+  // Share Shift Close via WhatsApp
+  const shareShiftWhatsApp = (shift: ShiftCloseRecord) => {
+    const settings = getStoreSettings();
+    const diffLabel =
+      shift.cashDifference === 0
+        ? "✅ PAS / SEIMBANG (Rp 0)"
+        : shift.cashDifference > 0
+        ? `🟢 LEBIH +${formatRupiah(shift.cashDifference)}`
+        : `🔴 KURANG -${formatRupiah(Math.abs(shift.cashDifference))}`;
+
+    const lines = [
+      `*LAPORAN TUTUP SHIFT KASIR*`,
+      `*${settings.storeName}*`,
+      `================================`,
+      `Waktu    : ${formatDateTime(shift.closedAt)}`,
+      `Terminal : ${shift.deviceLabel || "Kasir POS"}`,
+      `Kasir    : ${shift.cashierName || "Kasir Dewi"}`,
+      `Jml Nota : *${shift.orderCount} Transaksi*`,
+      `================================`,
+      `*RINCIAN OMZET SHIFT:*`,
+      `💵 Tunai    : ${formatRupiah(shift.tunai)}`,
+      `📱 QRIS     : ${formatRupiah(shift.qris)}`,
+      `🏦 Transfer : ${formatRupiah(shift.transfer)}`,
+      `📒 Kasbon   : ${formatRupiah(shift.kasbon)}`,
+      `--------------------------------`,
+      `*TOTAL OMZET : ${formatRupiah(shift.totalRevenue)}*`,
+      `💸 Kas Keluar Laci : -${formatRupiah(shift.drawerExpenses)}`,
+      `📈 Est. Laba Bersih: ${formatRupiah(shift.netProfit)}`,
+      `================================`,
+      `*CEK FISIK UANG LACI KASIR:*`,
+      `• Saldo Sistem : ${formatRupiah(shift.systemCashDrawer)}`,
+      `• Fisik Aktual : *${formatRupiah(shift.actualCashDrawer)}*`,
+      `• Status Selisih: *${diffLabel}*`,
+      ...(shift.notes ? [`• Catatan Kasir: ${shift.notes}`] : []),
+      `================================`,
+    ];
+
+    window.open(
+      `https://api.whatsapp.com/send?text=${encodeURIComponent(lines.join("\n"))}`,
+      "_blank"
+    );
+  };
+
+  // Print Shift Close Thermal Receipt
+  const escapeHtml = (str: string): string =>
+    String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+
+  const printShiftReport = (shift: ShiftCloseRecord) => {
+    const settings = getStoreSettings();
+    const diffLabel =
+      shift.cashDifference === 0
+        ? "PAS / SEIMBANG (Rp 0)"
+        : shift.cashDifference > 0
+        ? `LEBIH +${formatRupiah(shift.cashDifference)}`
+        : `KURANG -${formatRupiah(Math.abs(shift.cashDifference))}`;
+
+    const safeStoreName = escapeHtml(settings.storeName || "Toko Sembako");
+    const safeClosedAt = escapeHtml(formatDateTime(shift.closedAt));
+    const safeDeviceLabel = escapeHtml(shift.deviceLabel || "Kasir POS");
+    const safeCashierName = escapeHtml(shift.cashierName || "Kasir Dewi");
+    const safeDiffLabel = escapeHtml(diffLabel);
+    const safeNotes = shift.notes ? escapeHtml(shift.notes) : "";
+
+    const win = window.open("", "_blank", "width=400,height=650");
+    if (!win) return;
+    win.document.write(`
+      <html>
+        <head>
+          <title>Rekap Tutup Shift - ${safeStoreName}</title>
+          <style>
+            body { font-family: monospace; width: 280px; margin: 0 auto; padding: 12px; font-size: 12px; color: #000; }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .divider { border-top: 1px dashed #000; margin: 8px 0; }
+            .row { display: flex; justify-content: space-between; margin: 3px 0; }
+          </style>
+        </head>
+        <body onload="window.print()">
+          <div class="center bold" style="font-size:14px">${safeStoreName}</div>
+          <div class="center">LAPORAN TUTUP SHIFT KASIR</div>
+          <div class="center" style="font-size:10px">${safeClosedAt}</div>
+          <div class="divider"></div>
+          <div class="row"><span>Terminal:</span><span>${safeDeviceLabel}</span></div>
+          <div class="row"><span>Kasir:</span><span>${safeCashierName}</span></div>
+          <div class="row"><span>Total Transaksi:</span><span class="bold">${shift.orderCount} Nota</span></div>
+          <div class="divider"></div>
+          <div class="bold">RINCIAN METODE PEMBAYARAN</div>
+          <div class="row"><span>- Penjualan Tunai:</span><span>${formatRupiah(shift.tunai)}</span></div>
+          <div class="row"><span>- Penjualan QRIS:</span><span>${formatRupiah(shift.qris)}</span></div>
+          <div class="row"><span>- Transfer Bank:</span><span>${formatRupiah(shift.transfer)}</span></div>
+          <div class="row"><span>- Piutang Kasbon:</span><span>${formatRupiah(shift.kasbon)}</span></div>
+          <div class="divider"></div>
+          <div class="row bold"><span>TOTAL OMZET:</span><span>${formatRupiah(shift.totalRevenue)}</span></div>
+          <div class="row"><span>Keluar Kas Laci:</span><span>-${formatRupiah(shift.drawerExpenses)}</span></div>
+          <div class="row"><span>Est. Laba Bersih:</span><span>${formatRupiah(shift.netProfit)}</span></div>
+          <div class="divider"></div>
+          <div class="bold">REKONSILIASI UANG LACI</div>
+          <div class="row"><span>Saldo Sistem:</span><span>${formatRupiah(shift.systemCashDrawer)}</span></div>
+          <div class="row"><span>Fisik Aktual:</span><span class="bold">${formatRupiah(shift.actualCashDrawer)}</span></div>
+          <div class="row bold"><span>Selisih Kas:</span><span>${safeDiffLabel}</span></div>
+          ${safeNotes ? `<div class="divider"></div><div>Catatan: ${safeNotes}</div>` : ""}
+          <div class="divider"></div>
+          <div class="center" style="font-size:10px">Dicetak otomatis dari POS ${safeStoreName}</div>
+        </body>
+      </html>
+    `);
+    win.document.close();
+  };
+
+  // Copy Shift Close Text to Clipboard
+  const copyShiftText = (shift: ShiftCloseRecord) => {
+    const diffLabel =
+      shift.cashDifference === 0
+        ? "PAS / SEIMBANG (Rp 0)"
+        : shift.cashDifference > 0
+        ? `LEBIH +${formatRupiah(shift.cashDifference)}`
+        : `KURANG -${formatRupiah(Math.abs(shift.cashDifference))}`;
+    const raw = `REKAP TUTUP SHIFT - ${getStoreSettings().storeName}\nWaktu: ${formatDateTime(shift.closedAt)}\nKasir: ${shift.cashierName} (${shift.deviceLabel})\nTotal Transaksi: ${shift.orderCount} Nota\nTotal Omzet: ${formatRupiah(shift.totalRevenue)}\nTunai: ${formatRupiah(shift.tunai)} | QRIS: ${formatRupiah(shift.qris)} | Transfer: ${formatRupiah(shift.transfer)} | Kasbon: ${formatRupiah(shift.kasbon)}\nKeluar Laci: -${formatRupiah(shift.drawerExpenses)}\nLaba Bersih: ${formatRupiah(shift.netProfit)}\nSaldo Sistem: ${formatRupiah(shift.systemCashDrawer)}\nFisik Aktual: ${formatRupiah(shift.actualCashDrawer)}\nSelisih Kas: ${diffLabel}${shift.notes ? `\nCatatan: ${shift.notes}` : ""}`;
+    navigator.clipboard.writeText(raw);
+    showFeedback("Teks rekap tutup shift berhasil disalin ke clipboard!", "success");
+  };
+
   return (
     <div className="min-h-screen bg-[#f4f6fb] text-[#131b2e] pb-24">
       {/* ─── TOAST NOTIFICATION ─── */}
@@ -321,11 +512,11 @@ export default function RiwayatPage() {
           </div>
         </div>
 
-        {/* Navigation Tabs (Histori Struk vs Mutasi Gudang) */}
-        <div className="flex items-center gap-2 mb-5 border-b border-slate-200 pb-2">
+        {/* Navigation Tabs (Histori Struk vs Mutasi Gudang vs Rekap Tutup Shift) */}
+        <div className="flex items-center gap-2 mb-5 border-b border-slate-200 pb-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab("SALES")}
-            className={`px-4 py-2 rounded-xl font-bold text-xs md:text-sm flex items-center gap-2 transition-all duration-200 active:scale-95 cursor-pointer ${
+            className={`px-4 py-2 rounded-xl font-bold text-xs md:text-sm flex items-center gap-2 transition-all duration-200 active:scale-95 cursor-pointer shrink-0 ${
               activeTab === "SALES"
                 ? "bg-emerald-700 text-white shadow-md shadow-emerald-950/20"
                 : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
@@ -336,7 +527,7 @@ export default function RiwayatPage() {
           </button>
           <button
             onClick={() => setActiveTab("MUTASI")}
-            className={`px-4 py-2 rounded-xl font-bold text-xs md:text-sm flex items-center gap-2 transition-all duration-200 active:scale-95 cursor-pointer ${
+            className={`px-4 py-2 rounded-xl font-bold text-xs md:text-sm flex items-center gap-2 transition-all duration-200 active:scale-95 cursor-pointer shrink-0 ${
               activeTab === "MUTASI"
                 ? "bg-emerald-700 text-white shadow-md shadow-emerald-950/20"
                 : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
@@ -344,6 +535,17 @@ export default function RiwayatPage() {
           >
             <span className="material-symbols-outlined text-[18px]">swap_horiz</span>
             <span>Mutasi Stok Gudang ({mutasi.length})</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("SHIFTS")}
+            className={`px-4 py-2 rounded-xl font-bold text-xs md:text-sm flex items-center gap-2 transition-all duration-200 active:scale-95 cursor-pointer shrink-0 ${
+              activeTab === "SHIFTS"
+                ? "bg-emerald-700 text-white shadow-md shadow-emerald-950/20"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">fact_check</span>
+            <span>Rekap Tutup Shift ({shifts.length})</span>
           </button>
         </div>
 
@@ -866,7 +1068,7 @@ export default function RiwayatPage() {
               )}
             </div>
           </>
-        ) : (
+        ) : activeTab === "MUTASI" ? (
           /* ─── TAB 2: MUTASI STOK GUDANG ─── */
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
             <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -959,6 +1161,420 @@ export default function RiwayatPage() {
               </table>
             </div>
           </div>
+        ) : (
+          /* ─── TAB 3: REKAP TUTUP SHIFT & SETORAN KASIR ─── */
+          <>
+            {/* 3 Summary Cards for Shifts */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Total Rekap Shift Tersimpan
+                </span>
+                <span className="text-xl md:text-2xl font-black text-slate-900 mt-1 block">
+                  {shifts.length} <span className="text-xs font-semibold text-slate-500">Shift</span>
+                </span>
+                <span className="text-[11px] text-emerald-700 font-semibold mt-0.5 block">
+                  Rekaman tutup shift & setoran laci
+                </span>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Setoran Tunai Fisik Terakhir
+                </span>
+                <span className="text-xl md:text-2xl font-black text-emerald-700 mt-1 block truncate">
+                  {shifts[0] ? formatRupiah(shifts[0].actualCashDrawer) : "Rp 0"}
+                </span>
+                <span className="text-[11px] text-slate-500 font-semibold mt-0.5 block truncate">
+                  {shifts[0]
+                    ? `Sistem: ${formatRupiah(shifts[0].systemCashDrawer)} (${formatDateTime(shifts[0].closedAt)})`
+                    : "Belum ada setoran"}
+                </span>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Status Selisih Kas Terakhir
+                </span>
+                <div className="mt-1.5">
+                  {!shifts[0] ? (
+                    <span className="text-sm font-bold text-slate-400">Belum Ada Data</span>
+                  ) : shifts[0].cashDifference === 0 ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-black">
+                      ✓ PAS / SEIMBANG (Rp 0)
+                    </span>
+                  ) : shifts[0].cashDifference > 0 ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-100 text-blue-800 text-xs font-black">
+                      LEBIH +{formatRupiah(shifts[0].cashDifference)}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-100 text-rose-800 text-xs font-black">
+                      KURANG -{formatRupiah(Math.abs(shifts[0].cashDifference))}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[11px] text-slate-500 font-semibold mt-1 block truncate">
+                  {shifts[0]
+                    ? `Kasir: ${shifts[0].cashierName} (${shifts[0].deviceLabel})`
+                    : "Simpan dari tombol Tutup Shift di Kasir"}
+                </span>
+              </div>
+            </div>
+
+            {/* Header Bar with Clear All Shifts Action */}
+            {shifts.length > 0 && (
+              <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">
+                    Daftar Rekaman Tutup Shift & Rekonsiliasi Laci Kasir
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Klik salah satu rekaman shift untuk melihat struk rekap lengkap, mencetak ulang, atau mengirim ke WhatsApp Owner.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowClearShiftsModal(true)}
+                  className="px-3 py-1.5 rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer self-start sm:self-auto active:scale-95 shrink-0"
+                >
+                  <span className="material-symbols-outlined text-[16px]">delete_sweep</span>
+                  <span>Kosongkan Riwayat Shift ({shifts.length})</span>
+                </button>
+              </div>
+            )}
+
+            {/* Two-Column Layout: Shift List on Left, Thermal Shift Receipt on Right */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+              <div className={`${selectedShift ? "lg:col-span-7" : "lg:col-span-12"} space-y-3`}>
+                {isLoading ? (
+                  <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center">
+                    <span className="material-symbols-outlined text-[36px] text-emerald-700 animate-spin">
+                      sync
+                    </span>
+                    <p className="text-sm font-bold text-slate-600 mt-2">Memuat riwayat tutup shift...</p>
+                  </div>
+                ) : shifts.length === 0 ? (
+                  <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center">
+                    <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+                      <span className="material-symbols-outlined text-[32px]">fact_check</span>
+                    </div>
+                    <h3 className="text-base font-bold text-slate-800">Belum Ada Riwayat Tutup Shift</h3>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                      Buka halaman Kasir POS, klik tombol <strong>&quot;Tutup Shift&quot;</strong>, masukkan uang fisik laci aktual, lalu tekan <strong>&quot;Simpan Rekap Shift&quot;</strong> agar tersimpan di sini.
+                    </p>
+                    <Link
+                      href="/"
+                      className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md hover:bg-emerald-800 transition"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">point_of_sale</span>
+                      <span>Buka Kasir POS</span>
+                    </Link>
+                  </div>
+                ) : (
+                  shifts.map((shift) => {
+                    const isSelected = selectedShift?.id === shift.id;
+                    const diff = shift.cashDifference || 0;
+
+                    return (
+                      <div
+                        key={shift.id}
+                        onClick={() => setSelectedShift(shift)}
+                        className={`bg-white rounded-2xl p-4 border transition-all shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer ${
+                          isSelected
+                            ? "border-emerald-600 ring-2 ring-emerald-500/20 bg-emerald-50/20"
+                            : "border-slate-200/90 hover:border-emerald-400 hover:shadow-md"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div
+                            className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
+                              diff === 0
+                                ? "bg-emerald-100 text-emerald-800"
+                                : diff > 0
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-rose-100 text-rose-800"
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-[22px]">fact_check</span>
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-xs text-slate-900">
+                                {formatDateTime(shift.closedAt)}
+                              </span>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                                {shift.deviceLabel || "Kasir POS"}
+                              </span>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  diff === 0
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : diff > 0
+                                    ? "bg-blue-100 text-blue-800"
+                                    : "bg-rose-100 text-rose-800"
+                                }`}
+                              >
+                                {diff === 0
+                                  ? "PAS / SEIMBANG"
+                                  : diff > 0
+                                  ? `LEBIH +${formatRupiah(diff)}`
+                                  : `KURANG -${formatRupiah(Math.abs(diff))}`}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 mt-1.5 flex-wrap text-xs text-slate-600">
+                              <span className="font-bold text-slate-800">
+                                👤 {shift.cashierName || "Kasir Dewi"}
+                              </span>
+                              <span>•</span>
+                              <span>{shift.orderCount} Nota</span>
+                              <span>•</span>
+                              <span>
+                                Fisik Laci: <strong className="text-slate-900">{formatRupiah(shift.actualCashDrawer)}</strong> (Sistem: {formatRupiah(shift.systemCashDrawer)})
+                              </span>
+                            </div>
+
+                            {shift.notes && (
+                              <div className="mt-1 text-[11px] text-slate-500 italic truncate">
+                                📝 &quot;{shift.notes}&quot;
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 shrink-0">
+                          <div className="text-left sm:text-right">
+                            <div className="text-base sm:text-lg font-black text-emerald-700">
+                              {formatRupiah(shift.totalRevenue)}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-medium">
+                              Laba Bersih: {formatRupiah(shift.netProfit)}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedShift(shift);
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1 shadow-xs transition cursor-pointer active:scale-95"
+                              title="Lihat Struk Rekap"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">receipt_long</span>
+                              <span className="hidden sm:inline">Lihat Struk Rekap</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                shareShiftWhatsApp(shift);
+                              }}
+                              className="p-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition cursor-pointer"
+                              title="Kirim Rekap ke WhatsApp"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">chat</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteSingleShift(shift.id);
+                              }}
+                              className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition cursor-pointer"
+                              title="Hapus Rekap Shift Ini"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Right Column: Thermal Paper Preview for Selected Shift */}
+              {selectedShift && (
+                <div className="lg:col-span-5 sticky top-20">
+                  <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl p-4 shadow-2xl border border-slate-800 mb-4 flex items-center justify-between text-white">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-emerald-400">fact_check</span>
+                      <span className="font-bold text-sm">Preview Struk Rekap Tutup Shift</span>
+                    </div>
+                    <button
+                      onClick={() => setSelectedShift(null)}
+                      className="text-slate-400 hover:text-white text-xs p-1 cursor-pointer font-bold"
+                    >
+                      ✕ Tutup
+                    </button>
+                  </div>
+
+                  <div className="printable-receipt relative bg-[#fffdf9] text-slate-800 p-6 rounded-2xl shadow-2xl border border-amber-200/80 font-mono text-xs select-text overflow-hidden transition-all">
+                    <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-transparent via-amber-200/40 to-transparent border-t-2 border-dashed border-amber-300"></div>
+
+                    {/* Stamp */}
+                    <div
+                      className={`absolute right-4 top-14 pointer-events-none uppercase tracking-widest font-black text-[10px] px-2.5 py-1 rounded border-2 transform rotate-[-10deg] opacity-85 ${
+                        selectedShift.cashDifference === 0
+                          ? "border-emerald-700 text-emerald-800 bg-emerald-50/60"
+                          : selectedShift.cashDifference > 0
+                          ? "border-blue-700 text-blue-800 bg-blue-50/60"
+                          : "border-rose-600 text-rose-700 bg-rose-50/60"
+                      }`}
+                    >
+                      ★ {selectedShift.cashDifference === 0 ? "KAS KLOP" : selectedShift.cashDifference > 0 ? "KAS LEBIH" : "KAS KURANG"} ★
+                    </div>
+
+                    <div className="text-center pb-3">
+                      <div className="font-black text-lg tracking-wider text-slate-900">
+                        {getStoreSettings().storeName}
+                      </div>
+                      <div className="text-[11px] font-bold text-slate-700">
+                        LAPORAN TUTUP SHIFT & SETORAN KASIR
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-0.5">
+                        {formatDateTime(selectedShift.closedAt)}
+                      </div>
+                    </div>
+
+                    <div className="border-b-2 border-dashed border-slate-300 my-2"></div>
+
+                    <div className="space-y-1 text-[11px] text-slate-700">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">ID Shift:</span>
+                        <span className="font-bold text-slate-900">{selectedShift.id}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Terminal:</span>
+                        <span className="font-bold">{selectedShift.deviceLabel || "Kasir POS"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Kasir:</span>
+                        <span className="font-bold">{selectedShift.cashierName || "Kasir Dewi"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Total Transaksi:</span>
+                        <span className="font-bold text-slate-900">{selectedShift.orderCount} Nota</span>
+                      </div>
+                    </div>
+
+                    <div className="border-b-2 border-dashed border-slate-300 my-2.5"></div>
+
+                    <div className="space-y-1 text-[11px]">
+                      <div className="font-bold text-slate-900 mb-1">RINCIAN METODE PEMBAYARAN:</div>
+                      <div className="flex justify-between text-slate-700">
+                        <span>• Penjualan Tunai:</span>
+                        <span className="font-bold">{formatRupiah(selectedShift.tunai)}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-700">
+                        <span>• Penjualan QRIS:</span>
+                        <span className="font-bold">{formatRupiah(selectedShift.qris)}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-700">
+                        <span>• Transfer Bank:</span>
+                        <span className="font-bold">{formatRupiah(selectedShift.transfer)}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-700">
+                        <span>• Piutang Kasbon:</span>
+                        <span className="font-bold">{formatRupiah(selectedShift.kasbon)}</span>
+                      </div>
+                    </div>
+
+                    <div className="border-b-2 border-dashed border-slate-300 my-2.5"></div>
+
+                    <div className="space-y-1 text-[11px]">
+                      <div className="flex justify-between text-sm font-black text-slate-900">
+                        <span>TOTAL OMZET:</span>
+                        <span className="text-emerald-800">{formatRupiah(selectedShift.totalRevenue)}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-600">
+                        <span>Keluar Kas Laci:</span>
+                        <span className="text-orange-700 font-bold">-{formatRupiah(selectedShift.drawerExpenses)}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-700 font-bold">
+                        <span>Est. Laba Bersih:</span>
+                        <span className="text-blue-800">{formatRupiah(selectedShift.netProfit)}</span>
+                      </div>
+                    </div>
+
+                    <div className="border-b-2 border-dashed border-slate-300 my-2.5"></div>
+
+                    <div className="space-y-1 text-[11px]">
+                      <div className="font-bold text-slate-900 mb-1">REKONSILIASI UANG LACI:</div>
+                      <div className="flex justify-between text-slate-700">
+                        <span>Saldo Menurut Sistem:</span>
+                        <span>{formatRupiah(selectedShift.systemCashDrawer)}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-900 font-bold">
+                        <span>Uang Fisik Aktual:</span>
+                        <span>{formatRupiah(selectedShift.actualCashDrawer)}</span>
+                      </div>
+                      <div className="flex justify-between font-black pt-1">
+                        <span>Status Selisih Kas:</span>
+                        <span
+                          className={
+                            selectedShift.cashDifference === 0
+                              ? "text-emerald-700"
+                              : selectedShift.cashDifference > 0
+                              ? "text-blue-700"
+                              : "text-rose-700"
+                          }
+                        >
+                          {selectedShift.cashDifference === 0
+                            ? "PAS / SEIMBANG (Rp 0)"
+                            : selectedShift.cashDifference > 0
+                            ? `LEBIH +${formatRupiah(selectedShift.cashDifference)}`
+                            : `KURANG -${formatRupiah(Math.abs(selectedShift.cashDifference))}`}
+                        </span>
+                      </div>
+                      {selectedShift.notes && (
+                        <div className="p-2 mt-2 rounded bg-amber-50 border border-amber-200 text-slate-700 text-[10.5px]">
+                          <span className="font-bold">Catatan Kasir:</span> {selectedShift.notes}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="border-b-2 border-dashed border-slate-400 my-3"></div>
+
+                    <div className="text-center text-[10px] text-slate-500">
+                      <p className="font-bold text-slate-700">BUKTI SERAH TERIMA SHIFT KASIR</p>
+                      <p>{getStoreSettings().storeName}</p>
+                    </div>
+
+                    <div className="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-r from-transparent via-amber-200/40 to-transparent border-b-2 border-dashed border-amber-300"></div>
+                  </div>
+
+                  {/* Action Toolbar under Shift Receipt */}
+                  <div className="mt-3 grid grid-cols-3 gap-2 no-print">
+                    <button
+                      onClick={() => printShiftReport(selectedShift)}
+                      className="py-2.5 px-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">print</span>
+                      <span>Cetak Rekap</span>
+                    </button>
+                    <button
+                      onClick={() => shareShiftWhatsApp(selectedShift)}
+                      className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">chat</span>
+                      <span>Kirim WA</span>
+                    </button>
+                    <button
+                      onClick={() => copyShiftText(selectedShift)}
+                      className="py-2.5 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">content_copy</span>
+                      <span>Salin Teks</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
         )}
         </div>
       </div>
@@ -1033,6 +1649,47 @@ export default function RiwayatPage() {
                 className="flex-1 py-2 px-3 bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
               >
                 {isClearingMutasi ? (
+                  <>
+                    <span className="material-symbols-outlined text-[14px] animate-spin">sync</span>
+                    <span>Menghapus...</span>
+                  </>
+                ) : (
+                  <span>Ya, Kosongkan</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL KONFIRMASI KOSONGKAN RIWAYAT TUTUP SHIFT ─── */}
+      {showClearShiftsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 animate-scaleUp">
+            <div className="w-12 h-12 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center mb-3">
+              <span className="material-symbols-outlined text-[28px]">delete_sweep</span>
+            </div>
+            <h3 className="text-base font-bold text-slate-900">Kosongkan Riwayat Tutup Shift?</h3>
+            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+              Semua <strong>{shifts.length} catatan rekap tutup shift</strong> akan dihapus permanen dari histori perangkat ini.
+            </p>
+
+            <div className="flex items-center gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => setShowClearShiftsModal(false)}
+                disabled={isClearingShifts}
+                className="flex-1 py-2 px-3 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-50 transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleClearAllShifts}
+                disabled={isClearingShifts}
+                className="flex-1 py-2 px-3 bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                {isClearingShifts ? (
                   <>
                     <span className="material-symbols-outlined text-[14px] animate-spin">sync</span>
                     <span>Menghapus...</span>

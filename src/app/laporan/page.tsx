@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import type { SaleTransaction, StoreExpense, Customer, ExpenseCategory } from "@/lib/types";
 import { formatRupiah, formatDateTime } from "@/lib/formatters";
 import { deviceFetch, getDeviceId } from "@/lib/device";
@@ -1110,6 +1111,27 @@ function sanitizeCsvCell(val: string | number | boolean | undefined | null): str
                         {formatRupiah(cashDrawerAmount + tunaiTotal - drawerExpensesTotal)}
                       </span>
                     </div>
+                  </div>
+                  <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid #f1f5f9" }}>
+                    <Link
+                      href="/riwayat?tab=SHIFTS"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        fontSize: 11.5,
+                        fontWeight: 800,
+                        color: "#006c49",
+                        textDecoration: "none",
+                        background: "#f0fdf4",
+                        padding: "7px 10px",
+                        borderRadius: 8,
+                        border: "1px solid #bbf7d0",
+                      }}
+                    >
+                      <span>📋 Lihat Riwayat Tutup Shift & Setoran</span>
+                      <span>→</span>
+                    </Link>
                   </div>
                 </div>
               </div>

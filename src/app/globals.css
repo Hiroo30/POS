@@ -1006,9 +1006,6 @@ body {
     padding-bottom: 0 !important;
     min-height: 100vh;
   }
-  .desktop-only {
-    display: block !important;
-  }
   .mobile-only {
     display: none !important;
   }
@@ -1041,9 +1038,6 @@ body {
   }
   .desktop-only {
     display: none !important;
-  }
-  .mobile-only {
-    display: block !important;
   }
 }
 
